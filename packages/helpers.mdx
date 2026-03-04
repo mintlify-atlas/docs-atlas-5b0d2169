@@ -567,6 +567,95 @@ app.start();
   </Card>
 </CardGroup>
 
+## Additional Utilities
+
+### PersistedStore
+
+`PersistedStore` provides persistent storage across computer restarts with automatic serialization:
+
+```typescript
+import { PersistedStore } from '@cc-ts/helpers/persisted'
+
+// Create a store for player scores
+const scores = new PersistedStore("scores", {
+  player1: 0,
+  player2: 0
+})
+
+// Load existing data
+scores.load()
+
+// Update and save
+scores.value.player1 += 10
+scores.save()
+```
+
+Features:
+- Automatic serialization using ComputerCraft's `textutils`
+- Custom serializers for complex types (e.g., Set, Map)
+- Type-safe access to stored data
+- Simple file-based persistence
+
+For Sets, use the built-in `SetSerializer`:
+
+```typescript
+import { PersistedStore, SetSerializer } from '@cc-ts/helpers/persisted'
+
+const uniqueNames = new PersistedStore(
+  "names",
+  new Set<string>(),
+  SetSerializer
+)
+
+uniqueNames.value.add("Alice")
+uniqueNames.save()
+```
+
+### createProxy
+
+`createProxy` provides a Lua-friendly proxy implementation using metatables to intercept object operations:
+
+```typescript
+import { createProxy } from '@cc-ts/helpers/proxy'
+
+// Create a logging proxy
+const target = { count: 0 }
+const proxy = createProxy(target, {
+  get: (obj, key) => {
+    print(`Accessing ${key}`)
+    return obj[key]
+  },
+  set: (obj, key, value) => {
+    print(`Setting ${key} to ${value}`)
+    obj[key] = value
+  }
+})
+
+proxy.count++ // Logs access and set operations
+```
+
+Use cases:
+- **Virtual properties** - Add computed properties to objects
+- **Validation** - Validate values before assignment
+- **Logging** - Track property access and modifications
+- **Mock objects** - Create test doubles for debugging
+
+Example with virtual properties:
+
+```typescript
+const person = { firstName: "John", lastName: "Doe" }
+const withFullName = createProxy(person, {
+  get: (obj, key) => {
+    if (key === "fullName") {
+      return `${obj.firstName} ${obj.lastName}`
+    }
+    return obj[key]
+  }
+})
+
+print(withFullName.fullName) // "John Doe"
+```
+
 ## Next Steps
 
 <CardGroup cols={2}>

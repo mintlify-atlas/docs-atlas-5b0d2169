@@ -1,0 +1,152 @@
+---
+title: Installation
+description: Get CC-TS installed and ready for ComputerCraft TypeScript development
+---
+
+## System Requirements
+
+Before installing CC-TS, ensure you have the following installed:
+
+- **Bun** (recommended) or **Node.js** >= 12.13.0
+- **npm**, **yarn**, **pnpm**, or **bun** package manager
+- **TypeScript** 5.7.2 or higher
+
+<Note>
+CC-TS builder requires [Bun](https://bun.sh/) to run. Install Bun first if you haven't already:
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+</Note>
+
+## Quick Install
+
+The fastest way to get started with CC-TS is using the `create-cc-ts` scaffolding tool:
+
+<CodeGroup>
+
+```bash bun
+bun create cc-ts my-project
+```
+
+```bash npm
+npm create cc-ts@latest my-project
+```
+
+```bash yarn
+yarn create cc-ts my-project
+```
+
+```bash pnpm
+pnpm create cc-ts my-project
+```
+
+</CodeGroup>
+
+This interactive command will:
+
+1. Prompt you to choose a project directory
+2. Ask you to select a project type (Bundled App or CC Library)
+3. Set up all necessary configuration files
+4. Install required dependencies
+
+## Project Types
+
+When running `create-cc-ts`, you'll be prompted to choose between two project templates:
+
+### Bundled App
+
+Perfect for building complete ComputerCraft applications. Includes:
+
+- **@cc-ts/builder** - Smart bundling and compilation
+- **Development server** - Hot reload for rapid testing
+- **Watch mode** - Automatic recompilation on file changes
+- **Dependency management** - Import and bundle external packages
+- **Optional minification** - Optimize Lua output for production
+
+<Tip>
+Choose Bundled App if you're creating a standalone ComputerCraft program or game.
+</Tip>
+
+### CC Library
+
+Optimized for creating shareable libraries for the ComputerCraft community. Features:
+
+- **TSTL library mode** - Optimized for library distribution
+- **TypeScript declaration files** - Full type safety for consumers
+- **Minimal bundle size** - No unnecessary overhead
+- **npm publishing ready** - Configured for easy publishing
+
+<Tip>
+Choose CC Library if you're building a reusable utility or framework for other developers.
+</Tip>
+
+## Manual Installation
+
+If you prefer to add CC-TS to an existing project, install the packages individually:
+
+### For Bundled Apps
+
+<CodeGroup>
+
+```bash bun
+bun add -D @cc-ts/builder @cc-ts/typescript-to-lua typescript@^5.7.2
+bun add -D @jackmacwindows/craftos-types @jackmacwindows/cc-types @jackmacwindows/lua-types
+```
+
+```bash npm
+npm install --save-dev @cc-ts/builder @cc-ts/typescript-to-lua typescript@^5.7.2
+npm install --save-dev @jackmacwindows/craftos-types @jackmacwindows/cc-types @jackmacwindows/lua-types
+```
+
+</CodeGroup>
+
+### For CC Libraries
+
+<CodeGroup>
+
+```bash bun
+bun add -D @cc-ts/typescript-to-lua typescript@^5.7.2
+bun add -D @jackmacwindows/craftos-types @jackmacwindows/cc-types @jackmacwindows/lua-types
+```
+
+```bash npm
+npm install --save-dev @cc-ts/typescript-to-lua typescript@^5.7.2
+npm install --save-dev @jackmacwindows/craftos-types @jackmacwindows/cc-types @jackmacwindows/lua-types
+```
+
+</CodeGroup>
+
+## Core Packages
+
+CC-TS consists of several packages that work together:
+
+| Package | Description | Used In |
+|---------|-------------|----------|
+| **create-cc-ts** | Project scaffolding tool | Initial setup |
+| **@cc-ts/builder** | CLI bundler and dev server | Bundled apps |
+| **@cc-ts/helpers** | Utility functions for CC development | All projects |
+| **@cc-ts/crpc** | Type-safe RPC library (tRPC-compatible) | Network applications |
+| **@cc-ts/typescript-to-lua** | TypeScript to Lua compiler | All projects |
+
+## Verify Installation
+
+After installation, verify everything is set up correctly:
+
+```bash
+# Check if cc-ts CLI is available (for bundled apps)
+cc-ts --version
+
+# Or check TypeScript to Lua compiler (for libraries)
+tstl --version
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first CC-TS project
+  </Card>
+  <Card title="Builder CLI" icon="hammer" href="/packages/builder">
+    Learn about the cc-ts build tool
+  </Card>
+</CardGroup>

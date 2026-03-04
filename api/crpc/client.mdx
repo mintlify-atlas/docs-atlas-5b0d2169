@@ -1,0 +1,328 @@
+---
+title: Client
+description: Create type-safe CRPC clients
+---
+
+## createCRPCClient
+
+Create a fully type-safe client for calling CRPC procedures.
+
+```typescript
+import { createCRPCClient } from '@cc-ts/crpc/client';
+import type { AppRouter } from './server';
+
+const client = createCRPCClient<AppRouter>({
+  transport: transport,
+});
+```
+
+<ParamField path="opts" type="CreateCRPCClientOptions" required>
+  Client configuration options.
+</ParamField>
+
+<ParamField path="opts.transport" type="CRPCTransport" required>
+  The transport adapter to use (Rednet or WebSocket).
+</ParamField>
+
+<ResponseField name="return" type="CreateCRPCClient<TRouter>">
+  A type-safe client proxy for calling procedures.
+</ResponseField>
+
+## Client Usage
+
+### Calling Queries
+
+```typescript
+// Simple query
+const result = await client.greeting.query();
+
+// Query with input
+const user = await client.user.byId.query(123);
+```
+
+### Calling Mutations
+
+```typescript
+// Mutation with input
+const newUser = await client.user.create.mutate({
+  name: 'John Doe',
+  email: 'john@example.com',
+});
+```
+
+### Subscriptions
+
+```typescript
+const subscription = client.onMessage.subscribe(
+  { roomId: 'general' },
+  {
+    onData: (message) => {
+      print('New message:', message);
+    },
+    onError: (error) => {
+      print('Error:', error);
+    },
+    onStarted: () => {
+      print('Subscription started');
+    },
+    onStopped: () => {
+      print('Subscription stopped');
+    },
+  }
+);
+
+// Unsubscribe later
+subscription.unsubscribe();
+```
+
+## createCRPCUntypedClient
+
+Create an untyped client for cases where you don't have access to the router type.
+
+```typescript
+import { createCRPCUntypedClient } from '@cc-ts/crpc/client';
+
+const client = createCRPCUntypedClient({
+  transport: transport,
+});
+```
+
+<ParamField path="opts" type="CreateCRPCClientOptions" required>
+  Client configuration options.
+</ParamField>
+
+<ResponseField name="return" type="CRPCUntypedClient">
+  An untyped client instance.
+</ResponseField>
+
+### Untyped Client Methods
+
+#### query()
+
+Call a query procedure.
+
+```typescript
+const result = await client.query('user.byId', 123);
+```
+
+<ParamField path="path" type="string" required>
+  The path to the procedure (e.g., "user.byId").
+</ParamField>
+
+<ParamField path="input" type="unknown" optional>
+  The input to pass to the procedure.
+</ParamField>
+
+<ParamField path="opts" type="CRPCRequestOptions" optional>
+  Request options.
+</ParamField>
+
+<ResponseField name="return" type="Promise<unknown>">
+  The result from the procedure.
+</ResponseField>
+
+#### mutation()
+
+Call a mutation procedure.
+
+```typescript
+const result = await client.mutation('user.create', {
+  name: 'John',
+});
+```
+
+<ParamField path="path" type="string" required>
+  The path to the procedure.
+</ParamField>
+
+<ParamField path="input" type="unknown" optional>
+  The input to pass to the procedure.
+</ParamField>
+
+<ParamField path="opts" type="CRPCRequestOptions" optional>
+  Request options.
+</ParamField>
+
+<ResponseField name="return" type="Promise<unknown>">
+  The result from the procedure.
+</ResponseField>
+
+#### subscription()
+
+Subscribe to a subscription procedure.
+
+```typescript
+const subscription = client.subscription(
+  'onMessage',
+  { roomId: 'general' },
+  {
+    onData: (data) => print(data),
+    onError: (err) => print(err),
+  }
+);
+```
+
+<ParamField path="path" type="string" required>
+  The path to the subscription procedure.
+</ParamField>
+
+<ParamField path="input" type="unknown" required>
+  The input to pass to the subscription.
+</ParamField>
+
+<ParamField path="opts" type="CRPCSubscriptionOptions" required>
+  Subscription callbacks.
+</ParamField>
+
+<ParamField path="opts.onData" type="(data: unknown) => void" optional>
+  Called when data is received.
+</ParamField>
+
+<ParamField path="opts.onError" type="(error: CRPCClientError) => void" optional>
+  Called when an error occurs.
+</ParamField>
+
+<ParamField path="opts.onStarted" type="() => void" optional>
+  Called when the subscription starts.
+</ParamField>
+
+<ParamField path="opts.onStopped" type="() => void" optional>
+  Called when the subscription stops.
+</ParamField>
+
+<ResponseField name="return" type="Unsubscribable">
+  An object with an `unsubscribe()` method.
+</ResponseField>
+
+## Examples
+
+### Basic Client Setup
+
+```typescript
+import { createCRPCClient } from '@cc-ts/crpc/client';
+import { RednetCRPCTransport } from '@cc-ts/crpc/client/transports';
+import type { AppRouter } from './server';
+
+const transport = new RednetCRPCTransport(SERVER_ID);
+
+const client = createCRPCClient<AppRouter>({
+  transport,
+});
+
+// Use the client
+const greeting = await client.greeting.query();
+print(greeting); // "Hello world!"
+```
+
+### Nested Routers
+
+```typescript
+// Server
+const appRouter = t.router({
+  user: t.router({
+    list: t.procedure.query(() => users),
+    byId: t.procedure
+      .input(z.number())
+      .query(({ input }) => users.find(u => u.id === input)),
+  }),
+});
+
+// Client
+const users = await client.user.list.query();
+const user = await client.user.byId.query(1);
+```
+
+### Error Handling
+
+```typescript
+import { CRPCClientError } from '@cc-ts/crpc/client';
+
+try {
+  const result = await client.user.create.mutate({
+    name: 'John',
+  });
+} catch (error) {
+  if (error instanceof CRPCClientError) {
+    print('CRPC Error:', error.message);
+    print('Error code:', error.data?.result?.error?.code);
+  } else {
+    print('Unknown error:', error);
+  }
+}
+```
+
+### Subscriptions with State
+
+```typescript
+let isConnected = false;
+
+const subscription = client.onUserChange.subscribe(
+  undefined,
+  {
+    onStarted: () => {
+      isConnected = true;
+      print('Connected to user changes');
+    },
+    onStopped: () => {
+      isConnected = false;
+      print('Disconnected from user changes');
+    },
+    onData: (user) => {
+      print('User changed:', user);
+    },
+    onError: (error) => {
+      print('Subscription error:', error);
+      isConnected = false;
+    },
+  }
+);
+
+// Clean up
+subscription.unsubscribe();
+```
+
+### Using Untyped Client
+
+```typescript
+import { createCRPCUntypedClient } from '@cc-ts/crpc/client';
+import { RednetCRPCTransport } from '@cc-ts/crpc/client/transports';
+
+const transport = new RednetCRPCTransport(SERVER_ID);
+const client = createCRPCUntypedClient({ transport });
+
+// Call procedures with strings
+const result = await client.query('user.byId', 123);
+const created = await client.mutation('user.create', { name: 'John' });
+
+const sub = client.subscription('onMessage', { roomId: 'general' }, {
+  onData: (msg) => print(msg),
+});
+```
+
+## Type Safety
+
+The typed client provides full IntelliSense and type checking:
+
+```typescript
+// ✅ Correct usage
+const user = await client.user.byId.query(123);
+
+// ❌ Type error - wrong input type
+const user = await client.user.byId.query('123');
+
+// ❌ Type error - wrong method
+const user = await client.user.byId.mutate(123);
+
+// ❌ Type error - procedure doesn't exist
+const user = await client.user.nonexistent.query();
+```
+
+## Best Practices
+
+- Use the typed client for full type safety
+- Handle errors appropriately with try/catch
+- Unsubscribe from subscriptions when done
+- Share the router type between server and client
+- Use a single client instance per transport
+- Handle subscription lifecycle events (onStarted, onStopped)
+- Consider connection state when making requests

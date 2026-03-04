@@ -1,0 +1,579 @@
+---
+title: "@cc-ts/helpers"
+description: "Essential utilities and helpers for ComputerCraft development"
+icon: "toolbox"
+---
+
+## Overview
+
+`@cc-ts/helpers` is a collection of essential utilities that make ComputerCraft development easier and more enjoyable. It provides event handling, async utilities, CLI parsing, unique ID generation, and more - all with full TypeScript support.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @cc-ts/helpers
+```
+
+```bash yarn
+yarn add @cc-ts/helpers
+```
+
+```bash pnpm
+pnpm add @cc-ts/helpers
+```
+</CodeGroup>
+
+## Key Features
+
+<CardGroup cols={3}>
+  <Card title="Event System" icon="bell">
+    Type-safe event handling with EventEmitter
+  </Card>
+  <Card title="Scheduler" icon="clock">
+    Promise-based event waiting and timeouts
+  </Card>
+  <Card title="AbortController" icon="stop">
+    Cancel async operations gracefully
+  </Card>
+  <Card title="CLI Parser" icon="terminal">
+    Parse command-line arguments easily
+  </Card>
+  <Card title="Sandcorn IDs" icon="fingerprint">
+    Generate distributed unique IDs
+  </Card>
+  <Card title="Events" icon="calendar">
+    Type-safe ComputerCraft event wrappers
+  </Card>
+</CardGroup>
+
+## Event Handling
+
+### EventEmitter
+
+Create type-safe event emitters for your applications:
+
+```typescript
+import { EventEmitter } from "@cc-ts/helpers/eventEmitter";
+
+// Define your event types
+interface TurtleEvents {
+  'moved': [x: number, y: number, z: number];
+  'inventory:full': [];
+  'fuel:low': [remaining: number];
+}
+
+// Create emitter
+const events = new EventEmitter<TurtleEvents>();
+
+// Subscribe to events
+const cleanup = events.on('moved', (x, y, z) => {
+  print(`Turtle moved to ${x}, ${y}, ${z}`);
+});
+
+// Emit events
+events.emit('moved', 10, 64, -5);
+
+// One-time listeners
+events.once('inventory:full', () => {
+  print("Inventory is full!");
+});
+
+// Clean up
+cleanup();
+events.removeAllListeners();
+```
+
+### Scheduler
+
+Handle ComputerCraft events with promises:
+
+```typescript
+import { 
+  waitForEvent, 
+  on, 
+  once,
+  asyncSleep,
+  setTimeout,
+  runOsEventLoop 
+} from "@cc-ts/helpers/scheduler";
+
+// Wait for a specific event
+const [button, x, y] = await waitForEvent(
+  "mouse_click",
+  (button, x, y) => button === 1, // Filter
+  5000 // Timeout in ms
+);
+
+// Register persistent event handlers
+const unsubscribe = on("redstone", () => {
+  print("Redstone changed!");
+});
+
+// One-time event handler
+once("key", (key) => {
+  print(`Key pressed: ${key}`);
+});
+
+// Async sleep
+await asyncSleep(1000); // Sleep for 1 second
+
+// Set timeout
+const timerId = setTimeout(() => {
+  print("Timeout!");
+}, 5000);
+
+// Run the OS event loop (required for timeouts/intervals)
+runOsEventLoop();
+```
+
+### Event Types
+
+Use typed event classes for better type safety:
+
+```typescript
+import { 
+  KeyEvent,
+  MouseEvent,
+  RednetMessageEvent,
+  pullEvent,
+  pullEventAs 
+} from "@cc-ts/helpers/event";
+
+// Pull any event
+const event = pullEvent();
+if (event instanceof KeyEvent) {
+  print(`Key ${event.key} pressed`);
+}
+
+// Pull specific event type
+const keyEvent = pullEventAs(KeyEvent);
+if (keyEvent) {
+  print(`Key: ${keyEvent.key}, Held: ${keyEvent.isHeld}`);
+}
+
+// Handle mouse events
+const mouseEvent = pullEventAs(MouseEvent);
+if (mouseEvent) {
+  print(`Mouse ${mouseEvent.type} at ${mouseEvent.x}, ${mouseEvent.y}`);
+}
+
+// Rednet messages
+const rednetEvent = pullEventAs(RednetMessageEvent);
+if (rednetEvent) {
+  print(`Message from ${rednetEvent.sender}: ${rednetEvent.message}`);
+}
+```
+
+## Abort Control
+
+Cancel async operations gracefully:
+
+```typescript
+import { AbortController, AbortSignal } from "@cc-ts/helpers/abortController";
+
+// Create controller
+const controller = new AbortController();
+
+// Pass signal to async operations
+async function longTask(signal: AbortSignal) {
+  for (let i = 0; i < 100; i++) {
+    signal.throwIfAborted(); // Throws if aborted
+    
+    await asyncSleep(100);
+    print(`Step ${i}`);
+  }
+}
+
+// Start task
+longTask(controller.signal).catch(() => {
+  print("Task was cancelled!");
+});
+
+// Cancel it
+setTimeout(() => {
+  controller.abort("User cancelled");
+}, 2000);
+
+// Create signal with timeout
+const timeoutSignal = AbortSignal.timeout(5000);
+await longTask(timeoutSignal); // Aborts after 5 seconds
+
+// Combine signals
+const signal1 = AbortSignal.timeout(10000);
+const signal2 = controller.signal;
+const combined = AbortSignal.any([signal1, signal2]);
+// Aborts when either signal aborts
+```
+
+## CLI Parsing
+
+Build command-line applications easily:
+
+```typescript
+import { 
+  parseCliArgs,
+  executeCommand,
+  type Command 
+} from "@cc-ts/helpers/cli-parser";
+
+// Define commands
+const commands: Command[] = [
+  {
+    name: 'mine',
+    description: 'Start mining operation',
+    options: [
+      {
+        name: 'depth',
+        description: 'Mining depth',
+        defaultValue: 10
+      },
+      {
+        name: 'width',
+        description: 'Mining width',
+        defaultValue: 5
+      }
+    ],
+    action: (args) => {
+      print(`Mining ${args.width}x${args.depth}...`);
+    }
+  },
+  {
+    name: 'refuel',
+    description: 'Refuel the turtle',
+    positionalArgs: [
+      {
+        name: 'amount',
+        description: 'Amount to refuel',
+        required: false
+      }
+    ],
+    action: (args) => {
+      const amount = args.amount ?? "all";
+      print(`Refueling ${amount}...`);
+    }
+  }
+];
+
+// Parse and execute
+const args = parseCliArgs([...$vararg]);
+executeCommand(args, commands);
+```
+
+### Advanced CLI
+
+Build complex CLIs with subcommands:
+
+```typescript
+const gitCommands: Command[] = [
+  {
+    name: 'git',
+    description: 'Version control commands',
+    subcommands: [
+      {
+        name: 'commit',
+        description: 'Create a commit',
+        options: [
+          {
+            name: 'message',
+            description: 'Commit message'
+          }
+        ],
+        action: (args) => {
+          print(`Committing: ${args.message}`);
+        }
+      },
+      {
+        name: 'push',
+        description: 'Push changes',
+        action: () => {
+          print("Pushing changes...");
+        }
+      }
+    ]
+  }
+];
+
+// Usage: program.lua git commit --message "Initial commit"
+const args = parseCliArgs([...$vararg]);
+executeCommand(args, gitCommands);
+```
+
+## Unique ID Generation
+
+Generate distributed unique IDs with Sandcorn:
+
+```typescript
+import { 
+  createSandcornGenerator,
+  decodeSandcorn 
+} from "@cc-ts/helpers/sandcorn";
+
+// Create ID generator
+const generateId = createSandcornGenerator();
+
+// Generate unique IDs
+const id1 = generateId();
+const id2 = generateId();
+const id3 = generateId();
+
+print(`Generated IDs:`);
+print(id1); // e.g., "1a2b3c"
+print(id2); // e.g., "1a2b3d"
+print(id3); // e.g., "1a2b3e"
+
+// Decode an ID
+const decoded = decodeSandcorn(id1);
+print(`Tick: ${decoded.tick}`);
+print(`Machine ID: ${decoded.machineId}`);
+print(`Sequence: ${decoded.seq}`);
+
+// Use for unique identifiers
+interface Task {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+function createTask(name: string): Task {
+  return {
+    id: generateId(),
+    name,
+    createdAt: os.epoch("utc"),
+  };
+}
+```
+
+## Event Manager
+
+Create custom event systems:
+
+```typescript
+import { EventManager } from "@cc-ts/helpers/scheduler";
+
+// Define custom events
+interface GameEvents {
+  'player:join': [playerName: string];
+  'player:leave': [playerName: string];
+  'score:update': [player: string, score: number];
+  'game:over': [winner: string];
+}
+
+// Create event manager
+const gameEvents = new EventManager<GameEvents>();
+
+// Register handlers
+gameEvents.on('player:join', (playerName) => {
+  print(`${playerName} joined the game!`);
+});
+
+gameEvents.on('score:update', 
+  (player, score) => {
+    print(`${player} scored ${score} points!`);
+  },
+  (player, score) => score > 100 // Only fire for scores > 100
+);
+
+// Dispatch events
+await gameEvents.dispatch('player:join', 'Steve');
+await gameEvents.dispatch('score:update', 'Steve', 150);
+
+// Wait for specific event
+const [winner] = await gameEvents.waitFor('game:over', null, 60000);
+print(`Winner: ${winner}`);
+```
+
+## Advanced Patterns
+
+### Combining EventEmitter and Scheduler
+
+```typescript
+import { EventEmitter } from "@cc-ts/helpers/eventEmitter";
+import { on, runOsEventLoop } from "@cc-ts/helpers/scheduler";
+
+interface AppEvents {
+  'redstone:changed': [side: string, powered: boolean];
+}
+
+const app = new EventEmitter<AppEvents>();
+
+// Bridge OS events to custom events
+on("redstone", () => {
+  for (const side of ["left", "right", "front", "back", "top", "bottom"]) {
+    const powered = rs.getInput(side);
+    app.emit('redstone:changed', side, powered);
+  }
+});
+
+// Use custom events
+app.on('redstone:changed', (side, powered) => {
+  if (powered) {
+    print(`Redstone signal on ${side}!`);
+  }
+});
+
+runOsEventLoop();
+```
+
+### Timeout Patterns
+
+```typescript
+import { waitForEvent, AbortSignal } from "@cc-ts/helpers";
+
+// Race between event and timeout
+async function waitForClickWithTimeout(timeout: number) {
+  const signal = AbortSignal.timeout(timeout);
+  
+  try {
+    const [button, x, y] = await waitForEvent(
+      "mouse_click",
+      null,
+      timeout
+    );
+    return { button, x, y };
+  } catch (error) {
+    throw new Error("Click timeout");
+  }
+}
+
+try {
+  const click = await waitForClickWithTimeout(5000);
+  print(`Clicked at ${click.x}, ${click.y}`);
+} catch {
+  print("No click received");
+}
+```
+
+### Event-Driven Architecture
+
+```typescript
+import { EventEmitter } from "@cc-ts/helpers/eventEmitter";
+import { on } from "@cc-ts/helpers/scheduler";
+
+// Define application events
+interface SystemEvents {
+  'startup': [];
+  'shutdown': [];
+  'error': [error: Error];
+}
+
+class Application {
+  private events = new EventEmitter<SystemEvents>();
+  
+  constructor() {
+    // Handle terminate event
+    on("terminate", () => {
+      this.shutdown();
+    });
+  }
+  
+  public on = this.events.on.bind(this.events);
+  public once = this.events.once.bind(this.events);
+  
+  public start() {
+    this.events.emit('startup');
+    print("Application started");
+  }
+  
+  public shutdown() {
+    this.events.emit('shutdown');
+    print("Application shutting down");
+  }
+  
+  public handleError(error: Error) {
+    this.events.emit('error', error);
+  }
+}
+
+const app = new Application();
+
+app.on('startup', () => {
+  print("Initializing modules...");
+});
+
+app.on('shutdown', () => {
+  print("Cleaning up resources...");
+});
+
+app.on('error', (error) => {
+  print(`Error: ${error.message}`);
+});
+
+app.start();
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Clean Up Event Listeners">
+    Store cleanup functions and call them when done:
+    ```typescript
+    const cleanups: (() => void)[] = [];
+    
+    cleanups.push(events.on('event1', handler1));
+    cleanups.push(events.on('event2', handler2));
+    
+    // Later...
+    cleanups.forEach(cleanup => cleanup());
+    ```
+  </Accordion>
+
+  <Accordion title="Use AbortSignal for Long Operations">
+    Make operations cancellable:
+    ```typescript
+    async function operation(signal: AbortSignal) {
+      while (true) {
+        signal.throwIfAborted();
+        // Do work
+        await asyncSleep(100);
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Type Your Events">
+    Always define event types for better autocomplete:
+    ```typescript
+    interface MyEvents {
+      'event:name': [arg1: string, arg2: number];
+    }
+    
+    const emitter = new EventEmitter<MyEvents>();
+    // Now you get full type safety!
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Module Reference
+
+<CardGroup cols={2}>
+  <Card title="EventEmitter" icon="bell">
+    Type-safe pub/sub event system
+  </Card>
+  <Card title="Scheduler" icon="clock">
+    Event loop and async utilities
+  </Card>
+  <Card title="AbortController" icon="stop">
+    Cancellation for async operations
+  </Card>
+  <Card title="CLI Parser" icon="terminal">
+    Command-line argument parsing
+  </Card>
+  <Card title="Sandcorn" icon="fingerprint">
+    Distributed unique ID generation
+  </Card>
+  <Card title="Event Types" icon="calendar">
+    Typed CC event wrappers
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="@cc-ts/crpc" icon="network-wired" href="/packages/crpc">
+    Build RPC systems with CRPC
+  </Card>
+  <Card title="@cc-ts/builder" icon="hammer" href="/packages/builder">
+    Learn about the build system
+  </Card>
+</CardGroup>

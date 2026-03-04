@@ -1,0 +1,322 @@
+---
+title: Middleware
+description: Create reusable middleware for CRPC procedures
+---
+
+## createMiddlewareFactory
+
+The middleware factory creates reusable middleware that can be applied to procedures. Middleware can modify the context, validate inputs, or perform side effects.
+
+```typescript
+const authMiddleware = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.user) {
+    throw new CRPCError({ code: 'UNAUTHORIZED' });
+  }
+  
+  return next({
+    ctx: {
+      user: ctx.user,
+    },
+  });
+});
+```
+
+## Middleware Function
+
+A middleware function receives an options object and must call `next()` to continue the chain.
+
+```typescript
+type MiddlewareFunction<TContext, TMeta, TContextIn, TContextOut, TInput> = {
+  (opts: {
+    ctx: TContext;
+    type: 'query' | 'mutation' | 'subscription';
+    path: string;
+    input: TInput;
+    getRawInput: () => unknown;
+    meta: TMeta | undefined;
+    next: NextFunction;
+  }): Promise<MiddlewareResult>;
+};
+```
+
+### Options
+
+<ParamField path="ctx" type="TContext">
+  The current context object.
+</ParamField>
+
+<ParamField path="type" type="'query' | 'mutation' | 'subscription'">
+  The type of procedure being called.
+</ParamField>
+
+<ParamField path="path" type="string">
+  The path to the procedure (e.g., "user.byId").
+</ParamField>
+
+<ParamField path="input" type="TInput">
+  The validated input to the procedure.
+</ParamField>
+
+<ParamField path="getRawInput" type="() => unknown">
+  Function to get the raw (unvalidated) input.
+</ParamField>
+
+<ParamField path="meta" type="TMeta | undefined">
+  Metadata attached to the procedure.
+</ParamField>
+
+<ParamField path="next" type="NextFunction">
+  Function to call the next middleware or procedure.
+</ParamField>
+
+### Next Function
+
+The `next()` function continues the middleware chain:
+
+```typescript
+// Continue with no changes
+await next();
+
+// Modify context
+await next({
+  ctx: { user: authenticatedUser },
+});
+
+// Modify input
+await next({
+  input: transformedInput,
+});
+
+// Modify both
+await next({
+  ctx: { user: authenticatedUser },
+  input: transformedInput,
+});
+```
+
+## Middleware Builder
+
+Middleware builders allow you to chain multiple middleware together.
+
+### unstable_pipe()
+
+Pipe another middleware into the current middleware.
+
+```typescript
+const authMiddleware = t.middleware(async ({ ctx, next }) => {
+  // Auth logic
+  return next({ ctx: { user } });
+});
+
+const logMiddleware = t.middleware(async ({ ctx, next }) => {
+  print('Request started');
+  const result = await next();
+  print('Request completed');
+  return result;
+});
+
+const combined = authMiddleware
+  .unstable_pipe(logMiddleware);
+
+const protectedProcedure = t.procedure.use(combined);
+```
+
+<ParamField path="fn" type="MiddlewareFunction | MiddlewareBuilder">
+  The middleware to pipe into the current middleware.
+</ParamField>
+
+<ResponseField name="return" type="MiddlewareBuilder">
+  A new middleware builder with both middleware combined.
+</ResponseField>
+
+## Examples
+
+### Authentication Middleware
+
+```typescript
+const authMiddleware = t.middleware(async ({ ctx, next }) => {
+  const user = await validateToken(ctx.token);
+  
+  if (!user) {
+    throw new CRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'Invalid token',
+    });
+  }
+  
+  return next({
+    ctx: {
+      user,
+    },
+  });
+});
+
+const protectedProcedure = t.procedure.use(authMiddleware);
+
+const myProfile = protectedProcedure
+  .query(({ ctx }) => {
+    // ctx.user is guaranteed to exist
+    return ctx.user;
+  });
+```
+
+### Logging Middleware
+
+```typescript
+const logMiddleware = t.middleware(async ({ path, type, next }) => {
+  const start = os.epoch('utc');
+  print(`[${type}] ${path} - started`);
+  
+  const result = await next();
+  
+  const duration = os.epoch('utc') - start;
+  print(`[${type}] ${path} - completed in ${duration}ms`);
+  
+  return result;
+});
+
+const loggedProcedure = t.procedure.use(logMiddleware);
+```
+
+### Input Transformation
+
+```typescript
+const trimInputMiddleware = t.middleware(async ({ input, next }) => {
+  const trimmed = typeof input === 'string' 
+    ? input.trim() 
+    : input;
+  
+  return next({ input: trimmed });
+});
+```
+
+### Permission Checking
+
+```typescript
+const requireRole = (role: string) => {
+  return t.middleware(async ({ ctx, meta, next }) => {
+    if (meta?.role && ctx.user.role !== meta.role) {
+      throw new CRPCError({
+        code: 'FORBIDDEN',
+        message: `Requires ${meta.role} role`,
+      });
+    }
+    
+    return next();
+  });
+};
+
+const adminProcedure = t.procedure
+  .use(authMiddleware)
+  .use(requireRole('admin'))
+  .meta({ role: 'admin' });
+```
+
+### Rate Limiting
+
+```typescript
+const rateLimit = new Map<number, number>();
+
+const rateLimitMiddleware = t.middleware(async ({ ctx, next }) => {
+  const now = os.epoch('utc');
+  const lastRequest = rateLimit.get(ctx.computerID) || 0;
+  
+  if (now - lastRequest < 1000) {
+    throw new CRPCError({
+      code: 'TOO_MANY_REQUESTS',
+      message: 'Rate limit exceeded',
+    });
+  }
+  
+  rateLimit.set(ctx.computerID, now);
+  
+  return next();
+});
+```
+
+### Error Handling
+
+```typescript
+const errorHandlerMiddleware = t.middleware(async ({ next }) => {
+  try {
+    return await next();
+  } catch (error) {
+    print('Error occurred:', error);
+    
+    // Log to monitoring service
+    logToMonitoring(error);
+    
+    // Re-throw to client
+    throw error;
+  }
+});
+```
+
+### Timing and Performance
+
+```typescript
+const performanceMiddleware = t.middleware(async ({ path, next }) => {
+  const start = os.epoch('utc');
+  
+  const result = await next();
+  
+  const duration = os.epoch('utc') - start;
+  
+  if (duration > 1000) {
+    print(`[SLOW] ${path} took ${duration}ms`);
+  }
+  
+  return result;
+});
+```
+
+### Chaining Middleware
+
+```typescript
+const baseProcedure = t.procedure
+  .use(logMiddleware)
+  .use(performanceMiddleware);
+
+const protectedProcedure = baseProcedure
+  .use(authMiddleware);
+
+const adminProcedure = protectedProcedure
+  .use(requireRole('admin'));
+
+// Or use unstable_pipe
+const combined = logMiddleware
+  .unstable_pipe(performanceMiddleware)
+  .unstable_pipe(authMiddleware);
+
+const procedure = t.procedure.use(combined);
+```
+
+## Middleware Execution Order
+
+Middleware executes in the order it's added:
+
+```typescript
+const procedure = t.procedure
+  .use(middleware1) // Runs first
+  .use(middleware2) // Runs second
+  .use(middleware3) // Runs third
+  .query(resolver);  // Runs last
+```
+
+Each middleware must call `next()` to continue:
+
+```
+Request → middleware1 → middleware2 → middleware3 → resolver → Response
+                ↓           ↓           ↓
+            next()      next()      next()
+```
+
+## Best Practices
+
+- Always call `next()` in middleware (unless intentionally stopping the chain)
+- Keep middleware focused on a single responsibility
+- Use middleware for cross-cutting concerns (auth, logging, validation)
+- Create reusable middleware for common patterns
+- Chain middleware to build up complex authorization logic
+- Handle errors appropriately - either catch and transform or let them propagate
+- Avoid heavy computation in middleware - keep it fast

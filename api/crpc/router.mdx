@@ -1,0 +1,206 @@
+---
+title: Router
+description: Create and merge CRPC routers
+---
+
+## createRouterFactory
+
+The router factory is used to create routers that contain procedures. Routers can be nested to organize your API.
+
+```typescript
+const appRouter = t.router({
+  greeting: t.procedure.query(() => 'Hello world!'),
+  user: userRouter,
+});
+```
+
+## Router Structure
+
+Routers are created by passing an object where:
+- Keys are the procedure/router names
+- Values are procedures or nested routers
+
+```typescript
+const appRouter = t.router({
+  // Direct procedure
+  ping: t.procedure.query(() => 'pong'),
+  
+  // Nested router
+  user: t.router({
+    list: t.procedure.query(() => users),
+    create: t.procedure.mutation(() => createUser()),
+  }),
+});
+```
+
+<ResponseField name="return" type="Router<TRoot, TRecord>">
+  A router instance with type information about all procedures.
+</ResponseField>
+
+## Reserved Words
+
+The following words cannot be used as router or procedure names:
+
+- `then` - Reserved for Promise compatibility
+- `call` - Reserved for function calls
+- `apply` - Reserved for function application
+
+## mergeRouters
+
+Merge multiple routers into a single router. This is useful for organizing large APIs.
+
+```typescript
+import { mergeRouters } from '@cc-ts/crpc';
+
+const appRouter = mergeRouters(
+  userRouter,
+  postRouter,
+  commentRouter
+);
+```
+
+<ParamField path="...routerList" type="AnyRouter[]">
+  One or more routers to merge.
+</ParamField>
+
+<ResponseField name="return" type="Router">
+  A single router containing all procedures from the merged routers.
+</ResponseField>
+
+### Error Handling
+
+MergeRouters will throw an error if:
+- Multiple routers have different error formatters
+- Multiple routers have different transformers
+- Routers have duplicate procedure paths
+
+## Type Inference
+
+You can infer types from routers for use in clients:
+
+```typescript
+import type { inferRouterInputs, inferRouterOutputs } from '@cc-ts/crpc';
+
+type AppRouter = typeof appRouter;
+
+// Infer input types
+type RouterInput = inferRouterInputs<AppRouter>;
+
+// Infer output types  
+type RouterOutput = inferRouterOutputs<AppRouter>;
+
+// Access specific procedure types
+type UserListOutput = RouterOutput['user']['list'];
+```
+
+## Examples
+
+### Basic Router
+
+```typescript
+const appRouter = t.router({
+  greeting: t.procedure.query(() => {
+    return 'Hello from CRPC!';
+  }),
+  
+  echo: t.procedure
+    .input(z.string())
+    .query(({ input }) => {
+      return input;
+    }),
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+### Nested Routers
+
+```typescript
+const userRouter = t.router({
+  list: t.procedure.query(() => getUsers()),
+  
+  byId: t.procedure
+    .input(z.number())
+    .query(({ input }) => getUserById(input)),
+  
+  create: t.procedure
+    .input(z.object({ name: z.string() }))
+    .mutation(({ input }) => createUser(input)),
+});
+
+const postRouter = t.router({
+  list: t.procedure.query(() => getPosts()),
+  
+  byId: t.procedure
+    .input(z.number())
+    .query(({ input }) => getPostById(input)),
+});
+
+const appRouter = t.router({
+  user: userRouter,
+  post: postRouter,
+});
+
+// Access: appRouter.user.list, appRouter.post.byId, etc.
+```
+
+### Merging Routers
+
+```typescript
+// userRouter.ts
+export const userRouter = t.router({
+  list: t.procedure.query(() => getUsers()),
+});
+
+// postRouter.ts
+export const postRouter = t.router({
+  list: t.procedure.query(() => getPosts()),
+});
+
+// appRouter.ts
+import { mergeRouters } from '@cc-ts/crpc';
+
+export const appRouter = mergeRouters(
+  userRouter,
+  postRouter
+);
+
+// Resulting structure:
+// appRouter.list -> users
+// Note: mergeRouters creates a flat structure
+```
+
+### Organizing Large Routers
+
+```typescript
+// routers/user.ts
+export const userRouter = t.router({
+  list: t.procedure.query(() => getUsers()),
+  create: t.procedure.mutation(({ input }) => createUser(input)),
+});
+
+// routers/post.ts
+export const postRouter = t.router({
+  list: t.procedure.query(() => getPosts()),
+  create: t.procedure.mutation(({ input }) => createPost(input)),
+});
+
+// routers/index.ts
+export const appRouter = t.router({
+  user: userRouter,
+  post: postRouter,
+  admin: t.router({
+    stats: t.procedure.query(() => getStats()),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+## Best Practices
+
+- Organize routers by feature or domain (users, posts, comments, etc.)
+- Use nested routers for logical grouping rather than flat merge
+- Export router types for client usage
+- Keep router files focused on structure, move logic to separate functions
+- Avoid deeply nested routers (2-3 levels max)

@@ -1,0 +1,318 @@
+---
+title: CCTranspiler
+description: Programmatic API for TypeScript to Lua transpilation
+---
+
+The `CCTranspiler` class extends the base TypeScript-to-Lua transpiler with CC-TS specific bundling and module resolution.
+
+## Import
+
+```typescript
+import { CCTranspiler } from "@cc-ts/builder";
+```
+
+## Class: CCTranspiler
+
+Extends `@cc-ts/typescript-to-lua`'s `Transpiler` class with custom bundling logic.
+
+### Constructor
+
+```typescript
+new CCTranspiler(options?: TranspilerOptions)
+```
+
+<ParamField path="options" type="TranspilerOptions" optional>
+  Configuration options for the transpiler. See TypeScript-to-Lua documentation for available options.
+</ParamField>
+
+#### Example
+
+```typescript
+import { CCTranspiler } from "@cc-ts/builder";
+import * as ts from "typescript";
+
+const transpiler = new CCTranspiler({
+  // Custom transpiler options
+});
+```
+
+### Methods
+
+#### emit()
+
+Transpiles TypeScript program to bundled Lua files.
+
+```typescript
+emit(options: EmitOptions): EmitResult
+```
+
+<ParamField path="options.program" type="ts.Program" required>
+  TypeScript program instance created from source files
+</ParamField>
+
+<ParamField path="options.sourceFiles" type="ts.SourceFile[]" optional>
+  Specific source files to transpile. If not provided, all files in the program are transpiled. Used for incremental compilation.
+</ParamField>
+
+**Returns:** `EmitResult`
+
+```typescript
+interface EmitResult {
+  diagnostics: ts.Diagnostic[];
+  emitSkipped: boolean;
+}
+```
+
+#### Example
+
+```typescript
+import { CCTranspiler } from "@cc-ts/builder";
+import * as ts from "typescript";
+
+// Create TypeScript program
+const program = ts.createProgram({
+  rootNames: ["src/main.ts"],
+  options: {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.CommonJS,
+    outDir: "dist",
+  },
+});
+
+// Transpile to Lua
+const transpiler = new CCTranspiler();
+const { diagnostics, emitSkipped } = transpiler.emit({ program });
+
+if (diagnostics.length > 0) {
+  // Handle diagnostics
+  diagnostics.forEach((diagnostic) => {
+    console.error(ts.formatDiagnostic(diagnostic, {
+      getCurrentDirectory: () => process.cwd(),
+      getCanonicalFileName: (fileName) => fileName,
+      getNewLine: () => "\n",
+    }));
+  });
+}
+
+if (!emitSkipped) {
+  console.log("Transpilation successful!");
+}
+```
+
+## Helper Functions
+
+### transpileProjectFiles()
+
+High-level function to transpile an entire project from parsed command line configuration.
+
+```typescript
+transpileProjectFiles(parseResult: ParsedCommandLine): Promise<TranspileResult>
+```
+
+<ParamField path="parseResult" type="ParsedCommandLine" required>
+  Parsed command line configuration from `parseConfigFileWithSystem()`
+</ParamField>
+
+**Returns:** `Promise<TranspileResult>`
+
+```typescript
+interface TranspileResult {
+  diagnostics: ts.Diagnostic[];
+  emitSkipped: boolean;
+  program: ts.Program;
+}
+```
+
+**Throws:** `TranspilationError` if diagnostics contain errors
+
+#### Example
+
+```typescript
+import { transpileProjectFiles } from "@cc-ts/builder";
+import { parseConfigFileWithSystem } from "@cc-ts/builder";
+import * as ts from "typescript";
+
+try {
+  const parseResult = parseConfigFileWithSystem("tsconfig.json");
+  const result = await transpileProjectFiles(parseResult);
+  console.log("Project transpiled successfully!");
+} catch (error) {
+  if (error instanceof TranspilationError) {
+    console.error(error.getDiagnosticsString());
+  }
+}
+```
+
+## Error Handling
+
+### TranspilationError
+
+Thrown when transpilation fails with diagnostics.
+
+```typescript
+class TranspilationError extends Error {
+  constructor(
+    message: string,
+    public readonly diagnostics: readonly ts.Diagnostic[]
+  );
+  
+  getDiagnosticsString(): string;
+}
+```
+
+#### Properties
+
+<ParamField path="diagnostics" type="ts.Diagnostic[]" readonly>
+  Array of TypeScript diagnostics that caused the error
+</ParamField>
+
+#### Methods
+
+<ParamField path="getDiagnosticsString()" type="() => string">
+  Formats all diagnostics as a human-readable string with color and context
+</ParamField>
+
+#### Example
+
+```typescript
+import { transpileProjectFiles, TranspilationError } from "@cc-ts/builder";
+
+try {
+  await transpileProjectFiles(parseResult);
+} catch (error) {
+  if (error instanceof TranspilationError) {
+    console.error("Transpilation failed:");
+    console.error(error.getDiagnosticsString());
+    
+    // Access individual diagnostics
+    error.diagnostics.forEach((diagnostic) => {
+      if (diagnostic.file) {
+        const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(
+          diagnostic.start!
+        );
+        console.error(
+          `${diagnostic.file.fileName} (${line + 1},${character + 1})`
+        );
+      }
+    });
+  }
+}
+```
+
+## Complete Example
+
+```typescript
+import { CCTranspiler, TranspilationError } from "@cc-ts/builder";
+import * as ts from "typescript";
+import * as path from "path";
+
+// Define compiler options
+const options: ts.CompilerOptions = {
+  target: ts.ScriptTarget.ESNext,
+  module: ts.ModuleKind.CommonJS,
+  outDir: "dist",
+  rootDir: "src",
+  sourceMap: true,
+  // CC-TS specific options
+  minify: true,
+  builtInModules: ["cc.pretty"],
+  ignoreAsEntryPoint: ["**/*.lib.ts"],
+};
+
+// Create program
+const program = ts.createProgram({
+  rootNames: ["src/main.ts", "src/utils.ts"],
+  options,
+});
+
+// Check for pre-emit diagnostics
+const preEmitDiagnostics = ts.getPreEmitDiagnostics(program);
+
+if (preEmitDiagnostics.length > 0) {
+  console.error("Type checking failed:");
+  preEmitDiagnostics.forEach((diagnostic) => {
+    console.error(ts.formatDiagnostic(diagnostic, {
+      getCurrentDirectory: () => process.cwd(),
+      getCanonicalFileName: (fileName) => fileName,
+      getNewLine: () => "\n",
+    }));
+  });
+  process.exit(1);
+}
+
+// Transpile
+const transpiler = new CCTranspiler();
+const { diagnostics, emitSkipped } = transpiler.emit({ program });
+
+if (diagnostics.length > 0) {
+  console.error("Transpilation warnings/errors:");
+  diagnostics.forEach((diagnostic) => {
+    console.error(ts.formatDiagnostic(diagnostic, {
+      getCurrentDirectory: () => process.cwd(),
+      getCanonicalFileName: (fileName) => fileName,
+      getNewLine: () => "\n",
+    }));
+  });
+}
+
+if (emitSkipped) {
+  console.error("Emit skipped due to errors");
+  process.exit(1);
+}
+
+console.log("✓ Transpilation complete!");
+```
+
+## Emit Process
+
+The `CCTranspiler` follows this process:
+
+1. **Validation** - Validates CC-TS specific compiler options
+2. **Dependency Resolution** - Resolves module dependencies using TypeScript's module resolution
+3. **Entry Point Filtering** - Excludes files matching `ignoreAsEntryPoint` patterns
+4. **Bundling** - Creates a bundle for each entry point with:
+   - Custom `require()` override for module loading
+   - Lualib bundle (if needed)
+   - All transitive dependencies
+   - Optional minification
+   - Source map support
+5. **File Output** - Writes bundled Lua files to output directory
+
+## Integration with Build Tools
+
+The `CCTranspiler` can be integrated into build pipelines:
+
+```typescript
+import { CCTranspiler } from "@cc-ts/builder";
+import * as ts from "typescript";
+
+// Custom build script
+export async function build() {
+  const configPath = ts.findConfigFile(
+    process.cwd(),
+    ts.sys.fileExists,
+    "tsconfig.json"
+  );
+  
+  if (!configPath) {
+    throw new Error("Could not find tsconfig.json");
+  }
+  
+  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+  const parsedConfig = ts.parseJsonConfigFileContent(
+    configFile.config,
+    ts.sys,
+    path.dirname(configPath)
+  );
+  
+  const program = ts.createProgram({
+    rootNames: parsedConfig.fileNames,
+    options: parsedConfig.options,
+  });
+  
+  const transpiler = new CCTranspiler();
+  const { diagnostics, emitSkipped } = transpiler.emit({ program });
+  
+  return { diagnostics, emitSkipped };
+}
+```

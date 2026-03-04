@@ -1,0 +1,269 @@
+---
+title: Transports
+description: Transport adapters for CRPC clients
+---
+
+## CRPCTransport
+
+Transports handle the communication between CRPC clients and servers. CRPC provides two built-in transports:
+
+- **RednetCRPCTransport** - For ComputerCraft Rednet communication
+- **WebSocketCRPCTransport** - For WebSocket connections
+
+## RednetCRPCTransport
+
+Use Rednet to communicate with CRPC servers over the ComputerCraft network.
+
+```typescript
+import { RednetCRPCTransport } from '@cc-ts/crpc/client/transports';
+
+const transport = new RednetCRPCTransport(SERVER_ID, {
+  requestTimeout: 10000,
+  pingInterval: 5000,
+});
+```
+
+### Constructor
+
+<ParamField path="recipient" type="number" required>
+  The computer ID of the CRPC server.
+</ParamField>
+
+<ParamField path="opts" type="RednetCRPCTransportOptions" optional>
+  Transport configuration options.
+</ParamField>
+
+### Options
+
+<ParamField path="requestTimeout" type="number" default="10000">
+  Request timeout in milliseconds.
+</ParamField>
+
+<ParamField path="pingInterval" type="number" default="5000">
+  How often to ping the server in milliseconds.
+</ParamField>
+
+<ParamField path="connectionTimeout" type="number" default="15000">
+  Consider connection lost after this many milliseconds without response.
+</ParamField>
+
+<ParamField path="onStateChange" type="(state: 'connected' | 'disconnected') => void" optional>
+  Called when the connection state changes.
+</ParamField>
+
+### Properties
+
+<ResponseField name="state" type="'connected' | 'disconnected'">
+  The current connection state.
+</ResponseField>
+
+### Features
+
+- **Automatic Reconnection** - Detects server restarts and resubscribes
+- **Ping/Pong** - Monitors connection health
+- **Subscription Recovery** - Automatically recovers subscriptions after disconnect
+
+### Example
+
+```typescript
+import { createCRPCClient } from '@cc-ts/crpc/client';
+import { RednetCRPCTransport } from '@cc-ts/crpc/client/transports';
+import type { AppRouter } from './server';
+
+const SERVER_ID = 42;
+
+const transport = new RednetCRPCTransport(SERVER_ID, {
+  requestTimeout: 10000,
+  onStateChange: (state) => {
+    print(`Connection ${state}`);
+  },
+});
+
+const client = createCRPCClient<AppRouter>({ transport });
+
+// Use the client
+const result = await client.greeting.query();
+
+// Check connection state
+if (transport.state === 'connected') {
+  print('Connected to server');
+}
+```
+
+## WebSocketCRPCTransport
+
+Use WebSockets to communicate with CRPC servers over HTTP.
+
+```typescript
+import { WebSocketCRPCTransport } from '@cc-ts/crpc/client/transports';
+
+const transport = new WebSocketCRPCTransport({
+  url: 'ws://localhost:8080',
+  reconnect: true,
+});
+
+await transport.connect();
+```
+
+### Constructor
+
+<ParamField path="opts" type="WebSocketCRPCTransportOptions" required>
+  Transport configuration options.
+</ParamField>
+
+### Options
+
+<ParamField path="url" type="string" required>
+  The WebSocket URL to connect to (ws:// or wss://).
+</ParamField>
+
+<ParamField path="reconnect" type="boolean" default="false">
+  Automatically reconnect on connection loss.
+</ParamField>
+
+<ParamField path="requestTimeout" type="number" optional>
+  Request timeout in milliseconds.
+</ParamField>
+
+<ParamField path="keepAliveTimeout" type="number" optional>
+  Consider connection dead if no messages for this many milliseconds.
+</ParamField>
+
+<ParamField path="maxReconnectAttempts" type="number | 'infinite'" default="5">
+  Maximum number of reconnection attempts.
+</ParamField>
+
+<ParamField path="initialBackoffDelay" type="number" default="1000">
+  Initial delay before first reconnection attempt in milliseconds.
+</ParamField>
+
+<ParamField path="maxBackoffDelay" type="number" default="30000">
+  Maximum delay between reconnection attempts in milliseconds.
+</ParamField>
+
+<ParamField path="onStateChange" type="(state: 'connecting' | 'connected' | 'disconnected') => void" optional>
+  Called when the connection state changes.
+</ParamField>
+
+### WebSocket Options
+
+All standard WebSocket options are also supported:
+
+<ParamField path="timeout" type="number" optional>
+  Connection timeout in milliseconds.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>" optional>
+  HTTP headers to send with the connection request.
+</ParamField>
+
+### Methods
+
+#### connect()
+
+Connect to the WebSocket server.
+
+```typescript
+await transport.connect();
+```
+
+<ResponseField name="return" type="Promise<void>">
+  Resolves when connected, rejects on error.
+</ResponseField>
+
+### Properties
+
+<ResponseField name="websocket" type="WebSocket">
+  The underlying WebSocket instance. Throws if not connected.
+</ResponseField>
+
+### Features
+
+- **Automatic Reconnection** - Configurable reconnection with exponential backoff
+- **Keep Alive** - Monitors connection health with ping/pong
+- **Subscription Recovery** - Recovers subscriptions after reconnect
+- **Backoff Strategy** - Exponential backoff with jitter
+
+### Example
+
+```typescript
+import { createCRPCClient } from '@cc-ts/crpc/client';
+import { WebSocketCRPCTransport } from '@cc-ts/crpc/client/transports';
+import type { AppRouter } from './server';
+
+const transport = new WebSocketCRPCTransport({
+  url: 'ws://example.com:8080',
+  reconnect: true,
+  maxReconnectAttempts: 'infinite',
+  keepAliveTimeout: 30000,
+  onStateChange: (state) => {
+    print(`WebSocket ${state}`);
+  },
+});
+
+// Connect before using
+await transport.connect();
+
+const client = createCRPCClient<AppRouter>({ transport });
+
+// Use the client
+const result = await client.greeting.query();
+```
+
+## Custom Transports
+
+You can create custom transports by extending `CRPCTransport`:
+
+```typescript
+import { CRPCTransport, CRPCSubscription } from '@cc-ts/crpc/client/transports';
+
+class MyCustomTransport extends CRPCTransport {
+  async request(
+    message: CRPCClientOutgoingMessage
+  ): Promise<CRPCResponseMessage> {
+    // Send request and return response
+    // ...
+  }
+
+  subscribe(
+    message: CRPCClientOutgoingMessage,
+    onResponse: (response: CRPCResponseMessage) => void,
+    onStateChange?: (state: 'active' | 'inactive' | 'pending') => void
+  ): CRPCSubscription {
+    // Set up subscription
+    // ...
+  }
+}
+```
+
+### Required Methods
+
+<ParamField path="request" type="(message: CRPCClientOutgoingMessage) => Promise<CRPCResponseMessage>" required>
+  Send a request and return the response.
+</ParamField>
+
+<ParamField path="subscribe" type="(message, onResponse, onStateChange?) => CRPCSubscription" required>
+  Create a subscription and return a subscription object.
+</ParamField>
+
+## Comparison
+
+| Feature | RednetCRPCTransport | WebSocketCRPCTransport |
+|---------|---------------------|------------------------|
+| **Use Case** | ComputerCraft networks | HTTP/WebSocket servers |
+| **Auto Reconnect** | Yes | Configurable |
+| **Subscription Recovery** | Yes | Yes |
+| **Connection Monitoring** | Ping/Pong | Ping/Pong + Keep Alive |
+| **Setup** | No connection needed | Must call `connect()` |
+| **Server Detection** | Instance ID tracking | URL-based |
+
+## Best Practices
+
+- Use **RednetCRPCTransport** for ComputerCraft-to-ComputerCraft communication
+- Use **WebSocketCRPCTransport** for external servers or cross-platform communication
+- Enable reconnection for long-running clients
+- Handle state changes to update UI or retry logic
+- Set appropriate timeouts for your network conditions
+- Use keep alive timeouts to detect stale connections
+- Handle connection errors gracefully
+- Consider implementing retry logic for critical operations

@@ -1,0 +1,387 @@
+---
+title: "@cc-ts/builder"
+description: "TypeScript to Lua compiler and bundler for ComputerCraft"
+icon: "hammer"
+---
+
+## Overview
+
+`@cc-ts/builder` is the core build tool for CC-TS projects. It compiles TypeScript to Lua, bundles dependencies, and provides a development server for rapid iteration. Built on top of TypeScript-to-Lua (TSTL), it adds ComputerCraft-specific features like automatic bundling, minification, and a built-in dev server.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install --save-dev @cc-ts/builder typescript
+```
+
+```bash yarn
+yarn add --dev @cc-ts/builder typescript
+```
+
+```bash pnpm
+pnpm add -D @cc-ts/builder typescript
+```
+</CodeGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="TypeScript Compilation" icon="code">
+    Compiles TypeScript to Lua with full type safety and modern syntax support
+  </Card>
+  <Card title="Automatic Bundling" icon="box">
+    Bundles all dependencies into single Lua files for easy deployment
+  </Card>
+  <Card title="Watch Mode" icon="eye">
+    Automatically recompiles on file changes with incremental builds
+  </Card>
+  <Card title="Dev Server" icon="server">
+    Serves compiled files over HTTP for instant testing in-game
+  </Card>
+  <Card title="Source Maps" icon="map">
+    Generates source maps for better error messages and debugging
+  </Card>
+  <Card title="Minification" icon="compress">
+    Optionally minifies output for production deployments
+  </Card>
+</CardGroup>
+
+## CLI Usage
+
+The `cc-ts` command is the main entry point for the builder:
+
+```bash
+# Compile once
+cc-ts
+
+# Watch mode - recompile on changes
+cc-ts --watch
+
+# Watch mode with dev server
+cc-ts --watch --serve
+
+# Custom port for dev server
+cc-ts --watch --serve --servePort 3000
+
+# Minify output
+cc-ts --minify
+
+# Show help
+cc-ts --help
+
+# Show version
+cc-ts --version
+```
+
+## Configuration
+
+Configure CC-TS in your `tsconfig.json` under the `cc-ts` key:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "moduleResolution": "node",
+    "types": [
+      "@jackmacwindows/cc-types",
+      "@jackmacwindows/craftos-types"
+    ]
+  },
+  "tstl": {
+    "luaTarget": "cobalt52",
+    "sourceMapTraceback": true
+  },
+  "cc-ts": {
+    "minify": false,
+    "builtInModules": ["cc.pretty", "cc.expect"],
+    "serve": false,
+    "servePort": 8080,
+    "debug": false,
+    "extraPaths": [],
+    "ignoreAsEntryPoint": ["**/*.lib.ts"]
+  }
+}
+```
+
+### Configuration Options
+
+<ParamField path="minify" type="boolean" default="false">
+  Minify the resulting Lua files using luamin
+</ParamField>
+
+<ParamField path="builtInModules" type="string[]" default="[]">
+  List of built-in modules to exclude from bundling. By default, common CC modules like `cc.audio.dfpwm`, `cc.completion`, `cc.expect`, `cc.image.nft`, `cc.pretty`, `cc.require`, `cc.shell.completion`, and `cc.strings` are excluded.
+</ParamField>
+
+<ParamField path="serve" type="boolean" default="false">
+  Enable the HTTP development server (requires watch mode)
+</ParamField>
+
+<ParamField path="servePort" type="number" default="8080">
+  Port number for the development server
+</ParamField>
+
+<ParamField path="debug" type="boolean" default="false">
+  Enable debug logging
+</ParamField>
+
+<ParamField path="extraPaths" type="string[]" default="[]">
+  Additional Lua paths to include in package.path for require statements
+</ParamField>
+
+<ParamField path="ignoreAsEntryPoint" type="string[]" default='["**/*.lib.ts"]'>
+  Glob patterns for files to exclude from being treated as entry points. These files will still be included when imported by other modules.
+</ParamField>
+
+## Watch Mode
+
+Watch mode enables automatic recompilation when files change:
+
+```bash
+cc-ts --watch
+```
+
+### Incremental Compilation
+
+When enabled in your `tsconfig.json`, watch mode uses incremental compilation to only rebuild affected files:
+
+```json
+{
+  "compilerOptions": {
+    "incremental": true
+  }
+}
+```
+
+This significantly speeds up rebuild times by:
+- Only compiling changed files
+- Tracking file dependencies
+- Rebuilding dependent modules
+
+## Development Server
+
+The built-in HTTP server serves compiled Lua files for easy in-game testing:
+
+```bash
+cc-ts --watch --serve --servePort 8080
+```
+
+In ComputerCraft, download your code with:
+
+```lua
+-- Download and run
+shell.run("wget", "http://localhost:8080/index.lua", "startup.lua")
+shell.run("startup.lua")
+```
+
+<Tip>
+  The dev server automatically serves the latest compiled output, so you can iterate quickly without manually copying files.
+</Tip>
+
+## Bundling
+
+CC-TS automatically bundles your code and dependencies into single Lua files:
+
+<Steps>
+  <Step title="Entry Point Detection">
+    Each TypeScript file in your source directory is treated as a potential entry point
+  </Step>
+  
+  <Step title="Dependency Resolution">
+    The bundler traces all imports and requires to build the dependency graph
+  </Step>
+  
+  <Step title="Module Packaging">
+    All dependencies are packaged into a custom module system with a require override
+  </Step>
+  
+  <Step title="LuaLib Inclusion">
+    Only the needed TypeScript-to-Lua runtime features are included
+  </Step>
+</Steps>
+
+### Bundle Structure
+
+Each bundle includes:
+
+```lua
+-- Bundle header with metadata
+-- Generated by @cc-ts/builder@0.3.0
+-- Entry: index
+-- Hash: abc123
+-- BuildTime: 2024-03-04T12:00:00.000Z
+-- Files: index.ts, utils.ts
+-- Minified: false
+
+-- Custom require implementation
+local ____modules = {}
+local ____moduleCache = {}
+-- ...
+
+-- Module definitions
+____modules = {
+  ["index"] = function(...)
+    -- Your compiled code
+  end,
+  ["utils"] = function(...)
+    -- Dependency code
+  end,
+}
+
+-- Entry point
+return require("index", ...)
+```
+
+## Source Maps
+
+Enable source map traceback for better error messages:
+
+```json tsconfig.json
+{
+  "tstl": {
+    "sourceMapTraceback": true
+  }
+}
+```
+
+This adds TypeScript line numbers to Lua error messages:
+
+```
+index.ts:15: attempt to index nil value
+```
+
+## TypeScript Configuration
+
+Recommended TypeScript settings for CC-TS projects:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "@jackmacwindows/cc-types",
+      "@jackmacwindows/craftos-types",
+      "@jackmacwindows/lua-types"
+    ]
+  },
+  "tstl": {
+    "luaTarget": "cobalt52",
+    "luaLibImport": "require",
+    "sourceMapTraceback": true
+  }
+}
+```
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Use Incremental Compilation">
+    Enable incremental mode in watch mode for faster rebuilds:
+    ```json
+    {
+      "compilerOptions": {
+        "incremental": true
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Exclude Unnecessary Files">
+    Use `ignoreAsEntryPoint` to avoid building utility files as separate bundles:
+    ```json
+    {
+      "cc-ts": {
+        "ignoreAsEntryPoint": ["**/*.lib.ts", "src/utils/**"]
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Minimize Bundle Size">
+    Only import what you need and use built-in modules when possible:
+    ```typescript
+    // Bad - imports entire library
+    import * as helpers from "@cc-ts/helpers";
+    
+    // Good - imports only what's needed
+    import { EventEmitter } from "@cc-ts/helpers/eventEmitter";
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Package Scripts
+
+Add these scripts to your `package.json` for convenient development:
+
+```json package.json
+{
+  "scripts": {
+    "build": "cc-ts",
+    "watch": "cc-ts --watch",
+    "dev": "cc-ts --watch --serve",
+    "build:prod": "cc-ts --minify"
+  }
+}
+```
+
+Then run:
+
+```bash
+npm run build      # Build once
+npm run watch      # Watch mode
+npm run dev        # Dev server
+npm run build:prod # Minified production build
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Module not found errors">
+    Make sure your `builtInModules` configuration includes all CC modules you're using:
+    ```json
+    {
+      "cc-ts": {
+        "builtInModules": ["cc.pretty", "cc.expect", "cc.strings"]
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Dev server not working">
+    Ensure you're running in watch mode:
+    ```bash
+    cc-ts --watch --serve
+    ```
+    The serve option requires watch mode to be enabled.
+  </Accordion>
+
+  <Accordion title="Large bundle sizes">
+    Check what's being bundled and use `ignoreAsEntryPoint` to avoid building unnecessary entry points. Also consider using `builtInModules` for common CC libraries.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="@cc-ts/crpc" icon="network-wired" href="/packages/crpc">
+    Build type-safe RPC systems
+  </Card>
+  <Card title="@cc-ts/helpers" icon="toolbox" href="/packages/helpers">
+    Use utility functions and helpers
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first CC-TS project
+  </Card>
+  <Card title="TypeScript to Lua" icon="book" href="/concepts/typescript-to-lua">
+    Learn about TypeScript compilation
+  </Card>
+</CardGroup>

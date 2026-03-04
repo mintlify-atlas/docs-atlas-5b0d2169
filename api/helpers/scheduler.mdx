@@ -1,0 +1,498 @@
+---
+title: 'Scheduler'
+description: 'Event management and scheduling for ComputerCraft applications'
+---
+
+## Overview
+
+The scheduler module provides a robust, type-safe event management system for ComputerCraft applications. It includes utilities for handling OS events, managing timeouts, running event loops, and creating custom event systems.
+
+<Warning>
+  Many functions in this module (`osEvents`, `asyncSleep`, `setTimeout`, timeouts on events, etc.) require an **active event loop** to function. You must either:
+  1. Run the OS event loop with `runOsEventLoop()`
+  2. Implement your own event loop using `os.pullEvent()`
+</Warning>
+
+## Classes
+
+### EventManager
+
+A type-safe event management system for registering, dispatching, and waiting for events.
+
+```typescript
+class EventManager<_Events extends Record<string, any[]>>
+```
+
+**Type Parameters:**
+
+- `_Events` - A record type mapping event names to arrays of argument types
+
+**Example:**
+
+```typescript
+import { EventManager } from '@cc-ts/helpers/scheduler';
+
+interface MyEvents {
+  'player_join': [playerName: string];
+  'item_pickup': [itemId: number, count: number];
+}
+
+const events = new EventManager<MyEvents>();
+```
+
+#### Methods
+
+##### on
+
+```typescript
+on<T extends keyof _Events>(
+  name: T,
+  handlerFunction: (...args: _Events[T]) => Promise<void> | void,
+  filter?: ((...args: _Events[T]) => boolean) | null,
+  once?: boolean
+): () => void
+```
+
+Registers an event handler.
+
+<ParamField path="name" type="T" required>
+  Event name to listen for
+</ParamField>
+
+<ParamField path="handlerFunction" type="(...args: _Events[T]) => Promise<void> | void" required>
+  Callback function that handles the event
+</ParamField>
+
+<ParamField path="filter" type="((...args: _Events[T]) => boolean) | null">
+  Optional function to filter events based on arguments
+</ParamField>
+
+<ParamField path="once" type="boolean" default="false">
+  If true, handler is removed after first call
+</ParamField>
+
+**Returns:** Cleanup function to remove the handler
+
+**Example:**
+
+```typescript
+const unsubscribe = events.on(
+  'item_pickup',
+  (itemId, count) => print(`Picked up ${count} of item ${itemId}`),
+  (itemId, count) => count > 10 // Only for pickups > 10 items
+);
+
+// Later...
+unsubscribe();
+```
+
+##### once
+
+```typescript
+once<T extends keyof _Events>(
+  name: T,
+  handlerFunction: (...args: _Events[T]) => Promise<void> | void,
+  filter?: ((...args: _Events[T]) => boolean) | null
+): () => void
+```
+
+Registers a one-time event handler that auto-removes after first trigger.
+
+**Example:**
+
+```typescript
+events.once('player_join', (playerName) => {
+  print(`First player: ${playerName}`);
+});
+```
+
+##### waitForEvent
+
+```typescript
+waitForEvent<T extends keyof _Events>(
+  name: T,
+  check?: (...args: _Events[T]) => boolean,
+  timeout?: number
+): Promise<_Events[T]>
+```
+
+Returns a promise that resolves when the specified event occurs.
+
+<ParamField path="name" type="T" required>
+  Event name to wait for
+</ParamField>
+
+<ParamField path="check" type="(...args: _Events[T]) => boolean">
+  Optional function to filter events
+</ParamField>
+
+<ParamField path="timeout" type="number" default="0">
+  Timeout in milliseconds (0 = wait indefinitely)
+</ParamField>
+
+**Returns:** Promise resolving to event arguments
+
+**Throws:** If timeout is reached before event occurs
+
+**Example:**
+
+```typescript
+try {
+  const [itemId, count] = await events.waitForEvent(
+    'item_pickup',
+    (itemId) => itemId === 64, // Wait for diamond
+    5000 // 5 second timeout
+  );
+  print(`Picked up ${count} diamonds!`);
+} catch (error) {
+  print('Timed out waiting for diamonds');
+}
+```
+
+##### waitForAnyEvent
+
+```typescript
+waitForAnyEvent<T extends keyof _Events>(
+  names: T[],
+  check?: (event: T, ...args: _Events[T]) => boolean,
+  timeout?: number
+): Promise<[T, ..._Events[T]]>
+```
+
+Returns a promise that resolves when any of the specified events occur.
+
+<ParamField path="names" type="T[]" required>
+  Array of event names to wait for
+</ParamField>
+
+<ParamField path="check" type="(event: T, ...args: _Events[T]) => boolean">
+  Optional filter function
+</ParamField>
+
+<ParamField path="timeout" type="number" default="0">
+  Timeout in milliseconds
+</ParamField>
+
+**Returns:** Promise with tuple of `[eventName, ...args]`
+
+**Example:**
+
+```typescript
+const [event, ...args] = await events.waitForAnyEvent(
+  ['player_join', 'player_leave'],
+  (event, ...args) => event === 'player_join' || args[0] === 'admin',
+  10000
+);
+
+if (event === 'player_join') {
+  print(`Player ${args[0]} joined`);
+}
+```
+
+##### dispatch
+
+```typescript
+dispatch<T extends keyof _Events>(
+  name: T,
+  ...args: _Events[T]
+): Promise<void>
+```
+
+Dispatches an event, calling all registered handlers.
+
+<ParamField path="name" type="T" required>
+  Event name to dispatch
+</ParamField>
+
+<ParamField path="args" type="_Events[T]" required>
+  Arguments to pass to handlers
+</ParamField>
+
+**Example:**
+
+```typescript
+await events.dispatch('item_pickup', 64, 1);
+```
+
+### Panic
+
+```typescript
+class Panic extends Error
+```
+
+A special error class indicating unrecoverable situations.
+
+## Global Functions
+
+### OS Event Functions
+
+These functions operate on the global `osEvents` manager:
+
+#### on
+
+```typescript
+function on<T extends keyof Events>(
+  name: T,
+  handlerFunction: (...args: Events[T]) => Promise<void> | void,
+  filter?: ((...args: Events[T]) => boolean) | null,
+  once?: boolean
+): () => void
+```
+
+Binds an event handler to an OS event.
+
+<Warning>
+  Requires an active event loop to process events
+</Warning>
+
+**Example:**
+
+```typescript
+import { on } from '@cc-ts/helpers/scheduler';
+
+on('mouse_click', (button, x, y) => {
+  print(`Clicked at ${x}, ${y}`);
+});
+```
+
+#### once
+
+One-time OS event handler.
+
+#### waitForEvent
+
+Waits for a specific OS event.
+
+#### waitForAnyEvent
+
+Waits for any of the specified OS events.
+
+#### dispatch
+
+Dispatches an OS event.
+
+### Timing Functions
+
+#### asyncSleep
+
+```typescript
+function asyncSleep(ms: number): Promise<void>
+```
+
+Pauses execution for the specified number of milliseconds.
+
+<Warning>
+  Requires an active event loop to function
+</Warning>
+
+<ParamField path="ms" type="number" required>
+  Milliseconds to sleep
+</ParamField>
+
+**Example:**
+
+```typescript
+import { asyncSleep, runOsEventLoop } from '@cc-ts/helpers/scheduler';
+
+async function main() {
+  print('Starting');
+  await asyncSleep(1000);
+  print('Done after 1 second');
+}
+
+void main();
+runOsEventLoop();
+```
+
+#### setTimeout
+
+```typescript
+function setTimeout(func: () => void, ms: number): void
+```
+
+Executes a function after the specified delay.
+
+<Warning>
+  Requires an active event loop to function
+</Warning>
+
+<ParamField path="func" type="() => void" required>
+  Function to execute
+</ParamField>
+
+<ParamField path="ms" type="number" required>
+  Delay in milliseconds
+</ParamField>
+
+**Example:**
+
+```typescript
+import { setTimeout, runOsEventLoop } from '@cc-ts/helpers/scheduler';
+
+setTimeout(() => {
+  print('This runs after 1 second');
+}, 1000);
+
+runOsEventLoop();
+```
+
+### Event Loop
+
+#### runOsEventLoop
+
+```typescript
+function runOsEventLoop(raw?: boolean, debug?: boolean): void
+```
+
+Runs the main OS event loop, dispatching events to registered handlers.
+
+<Warning>
+  NOT allowed to be called from within an async function or Promise, as TSTL's Promise polyfill uses coroutines incompatible with `os.pullEvent()`
+</Warning>
+
+<ParamField path="raw" type="boolean" default="false">
+  If true, uses `os.pullEventRaw` instead of `os.pullEvent`
+</ParamField>
+
+<ParamField path="debug" type="boolean" default="false">
+  If true, prints debug information about events
+</ParamField>
+
+**Throws:** When an error occurs in the event loop
+
+**Example:**
+
+```typescript
+import { on, runOsEventLoop } from '@cc-ts/helpers/scheduler';
+
+on('mouse_click', (button, x, y) => {
+  print(`Click at ${x},${y}`);
+});
+
+runOsEventLoop(false, true); // Run with debug logging
+```
+
+### Utility Functions
+
+#### escalate
+
+```typescript
+function escalate(error: unknown): never
+```
+
+Utility to escalate promise rejections into thrown errors.
+
+**Example:**
+
+```typescript
+await waitForEvent('player_join')
+  .catch(escalate); // Will throw instead of silently failing
+```
+
+#### PANIC
+
+```typescript
+function PANIC(message: string, cause?: unknown): never
+```
+
+Throws a panic error indicating an unrecoverable situation.
+
+<ParamField path="message" type="string" required>
+  Panic message
+</ParamField>
+
+<ParamField path="cause" type="unknown">
+  Optional cause of the panic
+</ParamField>
+
+**Example:**
+
+```typescript
+if (criticalSystemFailure) {
+  PANIC('Critical system failure', error);
+}
+```
+
+## Complete Examples
+
+### OS Event Loop Usage
+
+```typescript
+import { on, runOsEventLoop } from '@cc-ts/helpers/scheduler';
+
+// Set up event handlers
+on('mouse_click', (button, x, y) => {
+  print(`Click at ${x},${y}`);
+});
+
+on('key', (keyCode) => {
+  if (keyCode === keys.q) {
+    print('Quit key pressed');
+  }
+});
+
+// Start the event loop
+runOsEventLoop();
+```
+
+### Custom Event System
+
+```typescript
+import { EventManager } from '@cc-ts/helpers/scheduler';
+
+interface GameEvents {
+  'score': [points: number, player: string];
+  'gameOver': [winner: string];
+  'powerup': [type: string, duration: number];
+}
+
+const gameEvents = new EventManager<GameEvents>();
+
+// Set up handlers
+gameEvents.on('score', (points, player) => {
+  print(`${player} scored ${points} points!`);
+});
+
+gameEvents.on('gameOver', (winner) => {
+  print(`Game over! Winner: ${winner}`);
+});
+
+// Game loop
+let gameRunning = true;
+let score = 0;
+
+while (gameRunning) {
+  // Game logic
+  score += 10;
+  await gameEvents.dispatch('score', score, 'Player1');
+  
+  if (score >= 100) {
+    await gameEvents.dispatch('gameOver', 'Player1');
+    gameRunning = false;
+  }
+}
+```
+
+### Extending OS Events
+
+```typescript
+import { on, dispatch } from '@cc-ts/helpers/scheduler';
+
+// Declare custom OS events
+declare module "@cc-ts/helpers/types" {
+  interface Events {
+    "turtle_dig": [success: boolean, block: string];
+    "inventory_change": [slot: number, count: number];
+  }
+}
+
+// Use with global 'on'
+on("turtle_dig", (success, block) => {
+  if (success) {
+    print(`Successfully mined ${block}`);
+  }
+});
+
+// Dispatch custom events
+await dispatch("turtle_dig", true, "minecraft:diamond_ore");
+```

@@ -1,0 +1,380 @@
+---
+title: Architecture
+description: Understand how CC-TS packages work together and the build pipeline
+---
+
+CC-TS is a monorepo-based TypeScript framework for ComputerCraft that enables you to write type-safe Lua code using modern TypeScript features. This page explains the overall architecture, package relationships, and how everything fits together.
+
+## Package Structure
+
+CC-TS is organized as a monorepo with two main categories of packages:
+
+### Core Packages (`packages/`)
+
+- **`@cc-ts/builder`** - The build toolchain and CLI that transpiles TypeScript to Lua
+- **`@cc-ts/typescript-to-lua`** - Fork of TypeScriptToLua configured for ComputerCraft
+- **`@cc-ts/craftos-types`** - TypeScript type definitions for CraftOS
+- **`create-cc-ts`** - Project scaffolding tool for creating new CC-TS projects
+
+### Runtime Libraries (`libraries/`)
+
+- **`@cc-ts/helpers`** - Runtime utilities and helpers for ComputerCraft development
+- **`@cc-ts/crpc`** - Type-safe RPC framework for client-server communication
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Your TypeScript Code                     │
+│                    (src/**/*.ts files)                       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   @cc-ts/builder (CLI)                       │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │   Parser    │→ │  Transpiler  │→ │     Bundler      │   │
+│  │ (tsconfig)  │  │  (TS → Lua)  │  │ (Module bundler) │   │
+│  └─────────────┘  └──────────────┘  └──────────────────┘   │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Generated Lua Files (dist/)                  │
+│  • Self-contained bundles with require() override            │
+│  • Source maps for debugging                                 │
+│  • Minified (optional)                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Build Pipeline
+
+The CC-TS build pipeline consists of three main stages:
+
+### 1. Parsing & Configuration
+
+The build process starts by locating and parsing your `tsconfig.json`:
+
+```typescript
+// From cc-ts.ts:81-91
+const configFileName = locateConfigFile(commandLine);
+const configParseResult = parseConfigFileWithSystem(
+    configFileName,
+    commandLineOptions
+);
+```
+
+The configuration supports both standard TypeScript options and CC-TS specific options:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "outDir": "dist",
+    // ... standard TS options
+  },
+  "tstl": {
+    "luaTarget": "CC-5.2",
+    "luaLibImport": "require-minimal"
+  },
+  "cc-ts": {
+    "minify": false,
+    "builtInModules": ["cc.strings"],
+    "ignoreAsEntryPoint": ["**/*.lib.ts"]
+  }
+}
+```
+
+### 2. Transpilation (TypeScript → Lua)
+
+The `CCTranspiler` class extends the TypeScriptToLua transpiler to handle ComputerCraft-specific requirements:
+
+```typescript
+// From transpiler.ts:87-92
+export class CCTranspiler extends tstl.Transpiler {
+    constructor(options?: tstl.TranspilerOptions) {
+        super(options);
+    }
+    // Custom emit plan generation...
+}
+```
+
+Key steps in transpilation:
+
+1. **Create TypeScript Program** - Parse all source files and resolve dependencies
+2. **Pre-emit Diagnostics** - Check for TypeScript errors before transpilation
+3. **Transpile to Lua** - Convert TypeScript AST to Lua code
+4. **Dependency Resolution** - Find all required modules and build dependency graph
+
+See the `CCTranspiler.emit()` method in the [Transpiler API](/api/builder/transpiler) for the full implementation.
+
+### 3. Bundling
+
+The `CCBundler` class creates self-contained Lua bundles:
+
+```typescript
+// From bundler.ts:108-123
+public bundleModule(moduleName: string) {
+    const entryFile = this.modules.get(moduleName);
+    const dependencies = this.moduleDependencies.get(moduleName);
+    
+    const files = [entryFile];
+    
+    // Collect all dependencies
+    for (const dependency of dependencies) {
+        if (!this.isBuiltInModule(dependency)) {
+            files.push(this.modules.get(dependency));
+        }
+    }
+    
+    // Build module table and bundle...
+}
+```
+
+#### Bundle Structure
+
+Each generated bundle contains:
+
+1. **Header** - Metadata about the bundle (entry point, files, build time, hash)
+2. **Require Override** - Custom `require()` implementation with module caching
+3. **Module Table** - All modules wrapped as functions
+4. **LuaLib Bundle** - Minimal TypeScript runtime helpers (if needed)
+5. **Source Map Support** - Stack trace mapping (optional)
+6. **Entry Point** - Code to execute the main module
+
+Example generated bundle structure:
+
+```lua
+-- Generated by @cc-ts/builder@0.3.0
+-- Entry: main
+-- Hash: abc123
+
+-- Custom require() with module cache
+local ____modules = {}
+local ____moduleCache = {}
+local function require(file, ...)
+    if ____moduleCache[file] then
+        return ____moduleCache[file].value
+    end
+    if ____modules[file] then
+        ____moduleCache[file] = { value = ____modules[file](file) }
+        return ____moduleCache[file].value
+    end
+    error("module '" .. file .. "' not found")
+end
+
+-- Module definitions
+____modules = {
+    ["main"] = function(...)
+        -- Your transpiled code
+    end,
+    ["utils/helpers"] = function(...)
+        -- Dependency code
+    end,
+}
+
+-- Execute entry point
+return require("main", ...)
+```
+
+## Package Relationships
+
+### Runtime Dependencies
+
+```
+@cc-ts/crpc
+    ↓ depends on
+@cc-ts/helpers
+    ↓ uses at runtime
+ComputerCraft APIs (cc.*, peripheral, rednet, etc.)
+```
+
+**CRPC Integration**: The `@cc-ts/crpc` library builds on top of `@cc-ts/helpers` to provide type-safe RPC:
+
+- Uses `EventEmitter` from helpers for message handling
+- Leverages `Scheduler` for async operations
+- Utilizes `Proxy` utilities for creating type-safe client proxies
+
+### Build-time Dependencies
+
+```
+Your Project
+    ↓ builds with
+@cc-ts/builder
+    ↓ uses
+@cc-ts/typescript-to-lua
+    ↓ targets
+Lua 5.2 (Cobalt)
+```
+
+## Development Workflow
+
+### Standard Build
+
+```bash
+# One-time build
+cc-ts
+
+# Output: dist/ directory with .lua files
+```
+
+### Watch Mode
+
+```bash
+# Rebuild on file changes
+cc-ts --watch
+
+# With incremental compilation (faster rebuilds)
+cc-ts --watch
+```
+
+In watch mode, CC-TS intelligently rebuilds only affected files:
+
+```typescript
+// From cc-ts.ts:273-346
+if (!hadErrorLastTime && options.incremental) {
+    // Get affected files and their dependencies
+    sourceFiles = [];
+    const collectDependencies = (file: ts.SourceFile) => {
+        // Recursively collect all dependencies
+    };
+}
+```
+
+### Development Server
+
+```bash
+# Watch mode + HTTP server for easy file transfer
+cc-ts --watch --serve --servePort 8080
+```
+
+This starts an HTTP server serving your compiled files, making it easy to download them in-game:
+
+```lua
+-- In ComputerCraft
+shell.run("wget", "http://yourip:8080/main.lua", "main.lua")
+```
+
+## Module Resolution
+
+CC-TS uses a custom module resolution system that:
+
+1. **Resolves TypeScript imports** - Handles `import` statements and converts them to Lua `require()` calls
+2. **Bundles dependencies** - Includes all required modules in the output bundle
+3. **Handles built-in modules** - Treats ComputerCraft APIs (like `cc.strings`) as external
+
+```typescript
+// From bundler.ts:95-106
+public isBuiltInModule(moduleName: string) {
+    return moduleName.startsWith("cc.") ||
+           moduleName === "lualib_bundle" ||
+           (options.builtInModules ?? []).includes(moduleName);
+}
+```
+
+### Built-in Modules
+
+These modules are NOT bundled (assumed to exist in ComputerCraft):
+
+- `cc.audio.dfpwm`
+- `cc.completion`
+- `cc.expect`
+- `cc.image.nft`
+- `cc.pretty`
+- `cc.require`
+- `cc.shell.completion`
+- `cc.strings`
+
+You can add custom built-in modules via the `builtInModules` option.
+
+## Entry Points
+
+By default, CC-TS treats every `.ts` file as an entry point and generates a separate bundle for each. You can exclude files from being entry points while still allowing them to be imported:
+
+```json
+{
+  "cc-ts": {
+    "ignoreAsEntryPoint": [
+      "**/*.lib.ts",
+      "src/utils/**"
+    ]
+  }
+}
+```
+
+Files matching these patterns can still be imported by other modules but won't generate standalone bundles.
+
+## Build Modes
+
+### Library Mode
+
+For creating reusable libraries:
+
+```json
+{
+  "tstl": {
+    "buildMode": "library"
+  }
+}
+```
+
+- Each file becomes a separate Lua module
+- No bundling performed
+- Modules use standard `require()` semantics
+
+### Default Mode (Bundled Applications)
+
+For creating standalone applications:
+
+```json
+{
+  "tstl": {
+    "buildMode": "default"
+  }
+}
+```
+
+- Each entry point becomes a self-contained bundle
+- All dependencies bundled together
+- Custom `require()` implementation
+- Ready to run in ComputerCraft
+
+## Performance Features
+
+### Incremental Compilation
+
+In watch mode with `incremental: true`, CC-TS tracks which files changed and only recompiles affected modules and their dependents.
+
+### Minification
+
+Enable minification to reduce file size:
+
+```json
+{
+  "cc-ts": {
+    "minify": true
+  }
+}
+```
+
+Uses the `luamin` library to compress Lua output.
+
+### Source Maps
+
+Enable source map support for better debugging:
+
+```json
+{
+  "tstl": {
+    "sourceMapTraceback": true
+  }
+}
+```
+
+This adds stack trace mapping so errors point to your TypeScript source files instead of generated Lua.
+
+## Next Steps
+
+- Learn about [TypeScript to Lua compilation](./typescript-to-lua) in detail
+- Explore the [@cc-ts/helpers library](/packages/helpers)
+- Build type-safe APIs with [@cc-ts/crpc](/packages/crpc)

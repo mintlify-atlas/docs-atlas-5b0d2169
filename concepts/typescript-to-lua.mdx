@@ -1,0 +1,682 @@
+---
+title: TypeScript to Lua Compilation
+description: How CC-TS transpiles TypeScript code to Lua for ComputerCraft
+---
+
+CC-TS uses a specialized fork of [TypeScriptToLua](https://typescripttolua.github.io/) called `@cc-ts/typescript-to-lua` to transpile your TypeScript code into Lua that runs in ComputerCraft. This page explains the compilation process, supported features, and limitations.
+
+## Compilation Overview
+
+The TypeScript to Lua compilation process consists of several stages:
+
+```
+┌──────────────────┐
+│ TypeScript Code  │
+│   (*.ts files)   │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  TypeScript AST  │  ← TypeScript Compiler parses source
+│   (Syntax Tree)  │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ TSTL Transformer │  ← Convert TS AST to Lua AST
+│  (TS AST → Lua)  │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│    Lua Code      │  ← Emit Lua source code
+│  (*.lua files)   │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│   CC Bundler     │  ← Bundle modules together
+│ (Self-contained) │
+└──────────────────┘
+```
+
+## The Transpilation Process
+
+### 1. TypeScript Program Creation
+
+First, CC-TS creates a TypeScript program with all your source files:
+
+```typescript
+// From transpiler.ts:48-54
+const program = ts.createProgram({
+    rootNames: parseResult.fileNames,
+    options: parseResult.options,
+    projectReferences: parseResult.projectReferences,
+    configFileParsingDiagnostics: ts.getConfigFileParsingDiagnostics(parseResult),
+});
+```
+
+This provides type checking and resolves all imports/exports.
+
+### 2. Pre-emit Diagnostics
+
+Before transpilation, CC-TS checks for TypeScript errors:
+
+```typescript
+// From transpiler.ts:56-57
+const preEmitDiagnostics = ts.getPreEmitDiagnostics(program);
+```
+
+This catches type errors, syntax errors, and other issues before attempting Lua generation.
+
+### 3. Transpilation to Lua
+
+The `CCTranspiler` class transpiles TypeScript to Lua:
+
+```typescript
+// From transpiler.ts:59-63
+const { diagnostics: transpileDiagnostics, emitSkipped } =
+    new CCTranspiler().emit({
+        program,
+    });
+```
+
+This step:
+- Converts TypeScript AST to Lua AST
+- Resolves module dependencies
+- Generates Lua source code
+- Creates source maps (if enabled)
+
+### 4. Emit Plan Generation
+
+The transpiler creates an "emit plan" that determines what files to generate:
+
+```typescript
+// From transpiler.ts:94-166
+protected getEmitPlan(
+    program: ts.Program,
+    diagnostics: ts.Diagnostic[],
+    files: tstl.ProcessedFile[],
+    plugins: tstl.Plugin[]
+): { emitPlan: tstl.EmitFile[] } {
+    // Resolve dependencies
+    const resolutionResult = resolveDependencies(program, files, this.emitHost, plugins);
+    
+    // Create bundler
+    const bundler = new CCBundler(resolutionResult.resolvedFiles, program, this.emitHost, diagnostics);
+    
+    // Bundle each file (unless ignored)
+    for (const file of files) {
+        if (!shouldIgnore) {
+            const bundleResult = bundler.bundleModule(modulePath);
+            emitPlan.push(bundleResult);
+        }
+    }
+    
+    return { emitPlan };
+}
+```
+
+## Lua Target: Cobalt (CC-5.2)
+
+CC-TS targets **Cobalt**, a Lua 5.2 implementation used by ComputerCraft. Key characteristics:
+
+- Lua 5.2 syntax and semantics
+- No `goto` statements
+- Limited standard library (ComputerCraft sandboxes many functions)
+- No native support for some ES features (classes, async/await, etc.)
+
+```typescript
+// From bundler.ts:422
+const luaTarget = tstl.LuaTarget.Cobalt52;
+```
+
+## Supported TypeScript Features
+
+### ✅ Fully Supported
+
+#### Basic Types
+
+```typescript
+let name: string = "Computer";
+let id: number = 42;
+let active: boolean = true;
+let data: any = { x: 10, y: 20 };
+```
+
+Transpiles to:
+
+```lua
+local name = "Computer"
+local id = 42
+local active = true
+local data = {x = 10, y = 20}
+```
+
+#### Functions
+
+```typescript
+function greet(name: string): string {
+    return `Hello, ${name}!`;
+}
+
+const add = (a: number, b: number) => a + b;
+```
+
+Transpiles to:
+
+```lua
+local function greet(name)
+    return "Hello, " .. name .. "!"
+end
+
+local add = function(a, b)
+    return a + b
+end
+```
+
+#### Classes
+
+```typescript
+class Computer {
+    private id: number;
+    
+    constructor(id: number) {
+        this.id = id;
+    }
+    
+    getId(): number {
+        return this.id;
+    }
+}
+```
+
+Transpiles to Lua using metatables for OOP simulation.
+
+#### Interfaces & Type Aliases
+
+```typescript
+interface Position {
+    x: number;
+    y: number;
+}
+
+type Direction = "north" | "south" | "east" | "west";
+```
+
+Interfaces and types are **erased** during compilation (type information only).
+
+#### Modules (import/export)
+
+```typescript
+// math.ts
+export function add(a: number, b: number) {
+    return a + b;
+}
+
+// main.ts
+import { add } from "./math";
+const result = add(1, 2);
+```
+
+Transpiles to:
+
+```lua
+-- math.lua
+local function add(a, b)
+    return a + b
+end
+return { add = add }
+
+-- main.lua
+local math = require("math")
+local result = math.add(1, 2)
+```
+
+#### Destructuring
+
+```typescript
+const { x, y } = position;
+const [first, second] = items;
+```
+
+Transpiles to:
+
+```lua
+local x, y = position.x, position.y
+local first, second = items[1], items[2]
+```
+
+#### Spread Operator
+
+```typescript
+const combined = { ...obj1, ...obj2 };
+const items = [...arr1, ...arr2];
+```
+
+Uses LuaLib helper functions to implement spreading.
+
+#### Template Literals
+
+```typescript
+const message = `Position: (${x}, ${y})`;
+```
+
+Transpiles to:
+
+```lua
+local message = "Position: (" .. tostring(x) .. ", " .. tostring(y) .. ")"
+```
+
+### ⚠️ Partially Supported
+
+#### Async/Await
+
+Not natively supported in Lua. You must use libraries like `@cc-ts/helpers` that provide coroutine-based async patterns:
+
+```typescript
+import { createScheduler } from "@cc-ts/helpers/scheduler";
+
+const scheduler = createScheduler();
+
+scheduler.spawn(function* () {
+    yield* scheduler.sleep(1); // Wait 1 second
+    print("Done!");
+});
+
+scheduler.run();
+```
+
+#### Promises
+
+Not built-in. Use generator-based patterns or custom implementations.
+
+#### Generators
+
+Partially supported via Lua coroutines:
+
+```typescript
+function* counter() {
+    let i = 0;
+    while (true) {
+        yield i++;
+    }
+}
+```
+
+### ❌ Not Supported
+
+#### Decorators
+
+Decorators require runtime reflection not available in Lua.
+
+#### Symbol Type
+
+Lua doesn't have a Symbol primitive.
+
+#### WeakMap / WeakSet
+
+Lua has weak tables but they work differently.
+
+#### Proxy Objects (ES6 Proxy)
+
+Lua metatables can provide similar functionality but not the full Proxy API.
+
+#### RegExp
+
+Lua uses pattern matching, not regular expressions. ComputerCraft doesn't include a regex library.
+
+## Module Resolution
+
+### Import Paths
+
+CC-TS resolves imports using TypeScript's module resolution:
+
+```typescript
+// Relative imports
+import { helper } from "./utils/helper";  // → "./utils/helper"
+import { lib } from "../shared/lib";     // → "../shared/lib"
+
+// Package imports
+import { createScheduler } from "@cc-ts/helpers/scheduler";  // → "@cc-ts/helpers/scheduler"
+```
+
+### Module Path Conversion
+
+The bundler converts file paths to Lua module paths:
+
+```typescript
+// From bundler.ts:86-93
+public createModulePath(pathToResolve: string) {
+    return formatPathToLuaPath(
+        trimExtension(
+            tstl.getEmitPathRelativeToOutDir(pathToResolve, this.program)
+        )
+    );
+}
+```
+
+Example:
+- `src/utils/helper.ts` → `"utils/helper"`
+- `src/main.ts` → `"main"`
+
+### Built-in Module Handling
+
+Modules starting with `cc.` are treated as ComputerCraft built-ins and not bundled:
+
+```typescript
+// From bundler.ts:95-106
+public isBuiltInModule(moduleName: string) {
+    return moduleName.startsWith("cc.") ||
+           moduleName === "lualib_bundle" ||
+           (options.builtInModules ?? []).includes(moduleName);
+}
+```
+
+```typescript
+import { expect } from "cc.expect";  // Not bundled - uses ComputerCraft's cc.expect
+```
+
+## LuaLib: TypeScript Runtime Helpers
+
+TypeScriptToLua includes a "LuaLib" - Lua implementations of TypeScript features that don't exist in native Lua:
+
+- Class inheritance and super calls
+- Spread operators
+- Object destructuring
+- Iterators
+- Symbol polyfills
+- And more...
+
+### Minimal LuaLib Bundling
+
+CC-TS uses **`require-minimal`** mode to only include the LuaLib features you actually use:
+
+```typescript
+// From bundler.ts:417-430
+private getLuaLibBundleContent(
+    options: ts.CompilerOptions,
+    resolvedFiles: tstl.ProcessedFile[]
+) {
+    const luaTarget = tstl.LuaTarget.Cobalt52;
+    const usedFeatures = findUsedLualibFeatures(
+        luaTarget,
+        this.emitHost,
+        resolvedFiles.map((f) => f.code)
+    );
+    return buildMinimalLualibBundle(usedFeatures, luaTarget, this.emitHost);
+}
+```
+
+This keeps bundle sizes small by analyzing which features your code uses.
+
+## Source Maps
+
+Source maps allow debugging with TypeScript file/line numbers instead of generated Lua:
+
+```json
+{
+  "tstl": {
+    "sourceMapTraceback": true
+  }
+}
+```
+
+### How Source Maps Work
+
+The bundler generates a line mapping from Lua to TypeScript:
+
+```typescript
+// From bundler.ts:374-415
+private printStackTraceBundleOverride(rootNode: SourceNode): string {
+    const map: Record<number, SourceMapLineData> = {};
+    
+    // Walk through source nodes and build line mapping
+    rootNode.walk((chunk, mappedPosition) => {
+        if (mappedPosition.line !== undefined) {
+            map[currentLine] = {
+                line: mappedPosition.line,
+                file: basename(mappedPosition.source),
+            };
+        }
+        currentLine += chunk.split("\n").length - 1;
+    });
+    
+    // Generate lookup table
+    return `__TS__SourceMapTraceBack(debug.getinfo(1).short_src, ${mapString});`;
+}
+```
+
+When an error occurs, CC-TS's source map support translates the Lua line number back to your TypeScript source.
+
+## Compiler Options
+
+### Standard TypeScript Options
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",           // Use latest TS features
+    "lib": ["ESNext"],            // Include ES library types
+    "module": "ESNext",           // ES module syntax
+    "moduleResolution": "bundler",// How to resolve imports
+    "strict": true,               // Enable all strict checks
+    "outDir": "dist",             // Output directory
+    "rootDir": "src",             // Source root directory
+    "incremental": true           // Faster rebuilds
+  }
+}
+```
+
+### TSTL-Specific Options
+
+```json
+{
+  "tstl": {
+    "luaTarget": "CC-5.2",           // Target Cobalt (ComputerCraft's Lua)
+    "luaLibImport": "require-minimal", // Only bundle used LuaLib features
+    "buildMode": "default",          // "default" or "library"
+    "sourceMapTraceback": true,      // Enable source map debugging
+    "noHeader": false                 // Include/exclude bundle header
+  }
+}
+```
+
+### CC-TS-Specific Options
+
+```json
+{
+  "cc-ts": {
+    "builtInModules": ["mylib"],     // Additional modules to treat as built-in
+    "minify": false,                  // Minify Lua output
+    "serve": false,                   // Start dev server (requires --watch)
+    "servePort": 8080,                // Dev server port
+    "extraPaths": ["/rom/modules"],  // Additional Lua package.path entries
+    "ignoreAsEntryPoint": [           // Exclude from bundle generation
+      "**/*.lib.ts",
+      "src/internal/**"
+    ]
+  }
+}
+```
+
+## Limitations & Workarounds
+
+### 1. No Native Async/Await
+
+**Problem**: Lua doesn't have native async/await.
+
+**Workaround**: Use generator-based coroutines with `@cc-ts/helpers`:
+
+```typescript
+import { createScheduler } from "@cc-ts/helpers/scheduler";
+
+const scheduler = createScheduler();
+
+scheduler.spawn(function* () {
+    const result = yield* makeRequest();
+    print(result);
+});
+```
+
+### 2. Array Indices Start at 1
+
+**Problem**: Lua arrays are 1-indexed, TypeScript arrays are 0-indexed.
+
+**Workaround**: TypeScriptToLua handles this automatically - TypeScript arrays are converted to 1-indexed Lua tables with special handling. Just use TypeScript arrays normally.
+
+```typescript
+const arr = [1, 2, 3];
+const first = arr[0];  // Transpiles correctly to arr[1] in Lua
+```
+
+### 3. Limited Standard Library
+
+**Problem**: ComputerCraft sandboxes many Lua standard library functions.
+
+**Workaround**: Use ComputerCraft's provided APIs:
+
+```typescript
+// Instead of os.time()
+import { os } from "@jackmacwindows/craftos-types";
+const time = os.time();
+
+// Instead of io.open()
+import { fs } from "@jackmacwindows/craftos-types";
+const file = fs.open("data.txt", "r");
+```
+
+### 4. Module Size Limits
+
+**Problem**: ComputerCraft computers have limited disk space (1MB by default).
+
+**Workaround**: Enable minification and use `require-minimal` LuaLib mode:
+
+```json
+{
+  "tstl": {
+    "luaLibImport": "require-minimal"
+  },
+  "cc-ts": {
+    "minify": true
+  }
+}
+```
+
+### 5. No Node.js Built-ins
+
+**Problem**: Can't import Node.js modules like `fs`, `path`, `http`.
+
+**Workaround**: Use ComputerCraft equivalents:
+
+- `fs` → ComputerCraft `fs` API
+- `http` → ComputerCraft `http` API
+- `path` → Manual string manipulation
+
+## Best Practices
+
+### 1. Use Type Definitions
+
+Install ComputerCraft type definitions for proper type checking:
+
+```bash
+bun add -D @jackmacwindows/lua-types @jackmacwindows/craftos-types @jackmacwindows/cc-types
+```
+
+```json
+{
+  "compilerOptions": {
+    "types": [
+      "@jackmacwindows/lua-types/cc-5.2",
+      "@jackmacwindows/craftos-types",
+      "@jackmacwindows/cc-types"
+    ]
+  }
+}
+```
+
+### 2. Avoid Heavy Dependencies
+
+Minimize npm dependencies since they need to be bundled:
+
+```typescript
+// ❌ Bad - large dependency
+import _ from "lodash";
+
+// ✅ Good - use CC-TS helpers or write simple utilities
+import { mapValues } from "./utils";
+```
+
+### 3. Use `const` for Immutables
+
+Lua doesn't have constants, but TypeScript enforces immutability at compile time:
+
+```typescript
+const MAX_ITEMS = 100;  // TypeScript prevents reassignment
+```
+
+### 4. Leverage Type Guards
+
+Use type narrowing for safer code:
+
+```typescript
+function process(value: string | number) {
+    if (typeof value === "string") {
+        // TypeScript knows value is string here
+        return value.toUpperCase();
+    } else {
+        // TypeScript knows value is number here
+        return value * 2;
+    }
+}
+```
+
+### 5. Test in ComputerCraft
+
+Always test your compiled Lua in actual ComputerCraft:
+
+```bash
+# Build and serve
+cc-ts --watch --serve
+
+# In ComputerCraft
+wget http://yourip:8080/main.lua main.lua
+main.lua
+```
+
+## Debugging
+
+### Enable Verbose Logging
+
+```bash
+cc-ts --tstlVerbose
+```
+
+Shows detailed transpilation steps.
+
+### Check Generated Lua
+
+Look at the `dist/` folder to see what Lua was generated:
+
+```bash
+cat dist/main.lua
+```
+
+### Use Source Maps
+
+Enable `sourceMapTraceback` to get TypeScript line numbers in error messages:
+
+```json
+{
+  "tstl": {
+    "sourceMapTraceback": true
+  }
+}
+```
+
+## Next Steps
+
+- Read the [Architecture overview](./architecture) to understand the full build pipeline
+- Explore [TypeScriptToLua documentation](https://typescripttolua.github.io/) for more transpilation details
+- Learn about [ComputerCraft's Lua environment](https://tweaked.cc/guide/environment.html)
+- Check out the [@cc-ts/helpers library](/packages/helpers) for runtime utilities

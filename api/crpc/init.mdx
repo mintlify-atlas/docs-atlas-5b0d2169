@@ -1,0 +1,140 @@
+---
+title: initCRPC
+description: Initialize your CRPC router instance
+---
+
+## initCRPC
+
+The `initCRPC` builder is used to initialize your CRPC router. This is the entry point for creating type-safe RPC applications.
+
+```typescript
+import { initCRPC } from '@cc-ts/crpc';
+
+const t = initCRPC.create();
+```
+
+## Methods
+
+### context()
+
+Define the context shape for your procedures. The context is available in all procedures and middleware.
+
+```typescript
+const t = initCRPC
+  .context<{ user: User }>()
+  .create();
+```
+
+<ParamField path="TNewContext" type="object | ContextCallback">
+  The context type or a function that returns the context.
+</ParamField>
+
+<ResponseField name="return" type="CRPCBuilder">
+  A new CRPC builder with the context type applied.
+</ResponseField>
+
+#### Example with Context Function
+
+```typescript
+const t = initCRPC
+  .context<() => Promise<{ user: User }>>>()
+  .create();
+```
+
+### meta()
+
+Add metadata typing to your procedures. Metadata can be used to attach additional information like permissions or descriptions.
+
+```typescript
+interface Meta {
+  role?: 'admin' | 'user';
+  description?: string;
+}
+
+const t = initCRPC
+  .context<Context>()
+  .meta<Meta>()
+  .create();
+```
+
+<ParamField path="TNewMeta" type="object">
+  The metadata type for procedures.
+</ParamField>
+
+<ResponseField name="return" type="CRPCBuilder">
+  A new CRPC builder with the metadata type applied.
+</ResponseField>
+
+### create()
+
+Create the root CRPC object with router, procedure, and middleware factories.
+
+```typescript
+const t = initCRPC.create({
+  errorFormatter: customErrorFormatter,
+  transformer: superjson,
+});
+```
+
+<ParamField path="opts" type="RuntimeConfigOptions" optional>
+  Configuration options for the CRPC instance.
+</ParamField>
+
+<ParamField path="opts.errorFormatter" type="ErrorFormatter" optional>
+  Custom error formatter for transforming errors before sending to clients.
+</ParamField>
+
+<ParamField path="opts.transformer" type="DataTransformerOptions" optional>
+  Data transformer for serializing/deserializing complex types.
+</ParamField>
+
+<ParamField path="opts.defaultMeta" type="TMeta" optional>
+  Default metadata applied to all procedures.
+</ParamField>
+
+<ResponseField name="return" type="object">
+  The CRPC instance with the following properties:
+  
+  - `router` - Factory for creating routers
+  - `procedure` - Builder for creating procedures
+  - `middleware` - Factory for creating middleware
+  - `mergeRouters` - Utility for merging multiple routers
+  - `_config` - Internal configuration (do not use directly)
+</ResponseField>
+
+## Complete Example
+
+```typescript
+import { initCRPC } from '@cc-ts/crpc';
+
+// Define context type
+interface Context {
+  computerID: number;
+  timestamp: number;
+}
+
+// Define metadata type
+interface Meta {
+  role?: 'admin' | 'user';
+  description?: string;
+}
+
+// Initialize CRPC
+const t = initCRPC
+  .context<Context>()
+  .meta<Meta>()
+  .create();
+
+// Export reusable pieces
+export const router = t.router;
+export const publicProcedure = t.procedure;
+export const middleware = t.middleware;
+```
+
+## Best Practices
+
+- Initialize CRPC **once** per application (typically in a `trpc.ts` file)
+- Define context and metadata types upfront for better type safety
+- Export the `router`, `procedure`, and `middleware` for use throughout your app
+- Use the context to pass request-scoped data like user information
+- Use metadata for static information like permissions or descriptions

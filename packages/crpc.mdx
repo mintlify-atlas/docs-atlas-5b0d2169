@@ -1,0 +1,566 @@
+---
+title: "@cc-ts/crpc"
+description: "Type-safe RPC framework for ComputerCraft"
+icon: "network-wired"
+---
+
+## Overview
+
+`@cc-ts/crpc` is a type-safe RPC (Remote Procedure Call) framework inspired by tRPC, designed specifically for ComputerCraft. It enables you to build type-safe client-server applications with full TypeScript inference, supporting both Rednet and WebSocket transports.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @cc-ts/crpc
+```
+
+```bash yarn
+yarn add @cc-ts/crpc
+```
+
+```bash pnpm
+pnpm add @cc-ts/crpc
+```
+</CodeGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Full Type Safety" icon="shield-check">
+    End-to-end type safety from server to client with TypeScript inference
+  </Card>
+  <Card title="Multiple Transports" icon="arrows-turn-to-dots">
+    Support for Rednet and WebSocket communication
+  </Card>
+  <Card title="Subscriptions" icon="rss">
+    Real-time data streaming with async generators
+  </Card>
+  <Card title="Middleware Support" icon="layer-group">
+    Extensible middleware system for authentication, logging, and more
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Type-safe error handling with custom error shapes
+  </Card>
+  <Card title="Auto-Reconnection" icon="rotate">
+    Automatic reconnection with exponential backoff
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+### Server Setup
+
+Create a type-safe API router:
+
+```typescript server.ts
+import { initCRPC } from "@cc-ts/crpc/initCRPC";
+import { createRednetAdapter } from "@cc-ts/crpc/adapter/rednet";
+
+// Initialize CRPC
+const t = initCRPC.create();
+
+// Create router
+const appRouter = t.router({
+  greeting: t.procedure
+    .input((input: string) => input)
+    .query(({ input }) => {
+      return `Hello, ${input}!`;
+    }),
+  
+  counter: t.procedure
+    .subscription(async function* () {
+      let count = 0;
+      while (true) {
+        yield count++;
+        await new Promise(resolve => os.startTimer(1));
+      }
+    }),
+});
+
+// Export type for client
+export type AppRouter = typeof appRouter;
+
+// Start server
+const adapter = createRednetAdapter({
+  router: appRouter,
+  protocol: "my-app",
+});
+
+adapter.listen();
+```
+
+### Client Setup
+
+Create a type-safe client:
+
+```typescript client.ts
+import { createCRPCClient } from "@cc-ts/crpc/client/create";
+import { RednetCRPCTransport } from "@cc-ts/crpc/client/transports/rednet";
+import type { AppRouter } from "./server";
+
+// Create transport
+const transport = new RednetCRPCTransport(
+  SERVER_COMPUTER_ID,
+  {
+    requestTimeout: 5000,
+    onStateChange: (state) => {
+      print(`Connection: ${state}`);
+    },
+  }
+);
+
+// Create client with full type safety
+const client = createCRPCClient<AppRouter>({
+  transport,
+});
+
+// Make type-safe calls
+const greeting = await client.greeting.query("World");
+print(greeting); // "Hello, World!"
+
+// Subscribe to real-time data
+const unsubscribe = client.counter.subscribe(
+  undefined,
+  {
+    onData: (count) => {
+      print(`Count: ${count}`);
+    },
+    onError: (error) => {
+      print(`Error: ${error.message}`);
+    },
+  }
+);
+```
+
+## Creating Procedures
+
+### Queries
+
+Queries are for reading data:
+
+```typescript
+const router = t.router({
+  getUser: t.procedure
+    .input((id: number) => id)
+    .query(({ input }) => {
+      return database.findUser(input);
+    }),
+  
+  listItems: t.procedure
+    .query(() => {
+      return inventory.list();
+    }),
+});
+```
+
+### Mutations
+
+Mutations are for modifying data:
+
+```typescript
+const router = t.router({
+  createUser: t.procedure
+    .input((data: { name: string; age: number }) => data)
+    .mutation(({ input }) => {
+      return database.createUser(input);
+    }),
+  
+  deleteItem: t.procedure
+    .input((id: number) => id)
+    .mutation(({ input }) => {
+      inventory.remove(input);
+      return { success: true };
+    }),
+});
+```
+
+### Subscriptions
+
+Subscriptions provide real-time data streams:
+
+```typescript
+const router = t.router({
+  onInventoryChange: t.procedure
+    .subscription(async function* () {
+      while (true) {
+        const event = await os.pullEvent("turtle_inventory");
+        yield inventory.list();
+      }
+    }),
+  
+  monitorRedstone: t.procedure
+    .input((side: string) => side)
+    .subscription(async function* ({ input }) {
+      while (true) {
+        await os.pullEvent("redstone");
+        yield rs.getInput(input);
+      }
+    }),
+});
+```
+
+## Middleware
+
+Middleware allows you to add custom logic to your procedures:
+
+```typescript
+import { initCRPC } from "@cc-ts/crpc/initCRPC";
+
+const t = initCRPC.create();
+
+// Authentication middleware
+const isAuthenticated = t.middleware(({ ctx, next }) => {
+  if (!ctx.user) {
+    throw new Error("Unauthorized");
+  }
+  return next({
+    ctx: {
+      user: ctx.user, // Now user is guaranteed to exist
+    },
+  });
+});
+
+// Logging middleware
+const logger = t.middleware(async ({ path, type, next }) => {
+  const start = os.epoch("utc");
+  print(`[${type}] ${path} - Started`);
+  
+  const result = await next();
+  
+  const duration = os.epoch("utc") - start;
+  print(`[${type}] ${path} - Completed in ${duration}ms`);
+  
+  return result;
+});
+
+// Create protected procedure
+const protectedProcedure = t.procedure
+  .unstable_pipe(isAuthenticated)
+  .unstable_pipe(logger);
+
+// Use in router
+const router = t.router({
+  getSecret: protectedProcedure
+    .query(({ ctx }) => {
+      // ctx.user is guaranteed to exist here
+      return `Secret for ${ctx.user.name}`;
+    }),
+});
+```
+
+## Context
+
+Context provides request-specific data to your procedures:
+
+```typescript
+interface Context {
+  user?: { id: number; name: string };
+  computerId: number;
+}
+
+const t = initCRPC.context<Context>().create();
+
+// In your adapter
+const adapter = createRednetAdapter({
+  router: appRouter,
+  createContext: (opts) => {
+    return {
+      computerId: opts.sender,
+      user: authenticateUser(opts),
+    };
+  },
+});
+```
+
+## Transports
+
+### Rednet Transport
+
+For computer-to-computer communication using Rednet:
+
+```typescript
+import { RednetCRPCTransport } from "@cc-ts/crpc/client/transports/rednet";
+
+const transport = new RednetCRPCTransport(
+  SERVER_ID,
+  {
+    requestTimeout: 10000,      // Request timeout in ms
+    pingInterval: 5000,          // Ping interval in ms
+    connectionTimeout: 15000,    // Consider disconnected after this time
+    onStateChange: (state) => {
+      if (state === "connected") {
+        print("Connected to server");
+      } else {
+        print("Disconnected from server");
+      }
+    },
+  }
+);
+```
+
+### WebSocket Transport
+
+For HTTP/WebSocket communication:
+
+```typescript
+import { WebSocketCRPCTransport } from "@cc-ts/crpc/client/transports/websocket";
+
+const transport = new WebSocketCRPCTransport({
+  url: "ws://localhost:8080",
+  reconnect: true,               // Auto-reconnect on disconnect
+  requestTimeout: 5000,          // Request timeout in ms
+  keepAliveTimeout: 30000,       // Consider connection dead after this time
+  maxReconnectAttempts: 5,       // Max reconnection attempts
+  initialBackoffDelay: 1000,     // Initial backoff delay in ms
+  maxBackoffDelay: 30000,        // Max backoff delay in ms
+  onStateChange: (state) => {
+    print(`WebSocket: ${state}`);
+  },
+});
+
+// Connect before using
+await transport.connect();
+```
+
+## Error Handling
+
+### Server-Side Errors
+
+```typescript
+import { CRPCError } from "@cc-ts/crpc/error/CRPCError";
+
+const router = t.router({
+  riskyOperation: t.procedure
+    .input((id: number) => id)
+    .mutation(({ input }) => {
+      const item = database.find(input);
+      
+      if (!item) {
+        throw new CRPCError({
+          code: "NOT_FOUND",
+          message: `Item ${input} not found`,
+        });
+      }
+      
+      if (!hasPermission()) {
+        throw new CRPCError({
+          code: "FORBIDDEN",
+          message: "Insufficient permissions",
+        });
+      }
+      
+      return item;
+    }),
+});
+```
+
+### Client-Side Error Handling
+
+```typescript
+import { CRPCClientError } from "@cc-ts/crpc/error/CRPCClientError";
+
+try {
+  const result = await client.riskyOperation.mutate(123);
+  print("Success:", result);
+} catch (error) {
+  if (error instanceof CRPCClientError) {
+    print(`Error: ${error.message}`);
+    print(`Code: ${error.data?.code}`);
+  }
+}
+```
+
+## Advanced Patterns
+
+### Nested Routers
+
+Organize your API with nested routers:
+
+```typescript
+const userRouter = t.router({
+  list: t.procedure.query(() => database.listUsers()),
+  get: t.procedure
+    .input((id: number) => id)
+    .query(({ input }) => database.getUser(input)),
+  create: t.procedure
+    .input((data: CreateUserInput) => data)
+    .mutation(({ input }) => database.createUser(input)),
+});
+
+const itemRouter = t.router({
+  list: t.procedure.query(() => inventory.list()),
+  transfer: t.procedure
+    .input((data: TransferInput) => data)
+    .mutation(({ input }) => inventory.transfer(input)),
+});
+
+const appRouter = t.router({
+  user: userRouter,
+  item: itemRouter,
+});
+
+// Client usage
+const users = await client.user.list.query();
+const items = await client.item.list.query();
+```
+
+### Merging Routers
+
+```typescript
+import { initCRPC } from "@cc-ts/crpc/initCRPC";
+
+const t = initCRPC.create();
+
+const router1 = t.router({
+  hello: t.procedure.query(() => "world"),
+});
+
+const router2 = t.router({
+  goodbye: t.procedure.query(() => "farewell"),
+});
+
+const appRouter = t.mergeRouters(router1, router2);
+```
+
+### Input Validation
+
+Validate inputs with custom validators:
+
+```typescript
+const router = t.router({
+  createUser: t.procedure
+    .input((data: unknown) => {
+      if (typeof data !== "object" || data === null) {
+        throw new Error("Invalid input");
+      }
+      
+      const { name, age } = data as any;
+      
+      if (typeof name !== "string" || name.length < 3) {
+        throw new Error("Name must be at least 3 characters");
+      }
+      
+      if (typeof age !== "number" || age < 0) {
+        throw new Error("Age must be a positive number");
+      }
+      
+      return { name, age };
+    })
+    .mutation(({ input }) => {
+      // input is validated and typed as { name: string; age: number }
+      return database.createUser(input);
+    }),
+});
+```
+
+## Connection Management
+
+### Handling Disconnections
+
+```typescript
+const transport = new RednetCRPCTransport(SERVER_ID, {
+  onStateChange: (state) => {
+    if (state === "disconnected") {
+      print("Lost connection to server!");
+      // Handle reconnection logic
+    } else if (state === "connected") {
+      print("Connected to server!");
+      // Resubscribe to events, etc.
+    }
+  },
+});
+```
+
+### Subscription Recovery
+
+Subscriptions automatically recover after reconnection:
+
+```typescript
+const unsubscribe = client.counter.subscribe(undefined, {
+  onData: (count) => print(`Count: ${count}`),
+  onError: (error) => print(`Error: ${error}`),
+  onStateChange: (state) => {
+    // state can be "active", "inactive", or "pending"
+    print(`Subscription: ${state}`);
+  },
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Split Router Definitions">
+    Keep your router definitions modular:
+    ```typescript
+    // routers/user.ts
+    export const userRouter = t.router({ ... });
+    
+    // routers/item.ts
+    export const itemRouter = t.router({ ... });
+    
+    // routers/index.ts
+    export const appRouter = t.router({
+      user: userRouter,
+      item: itemRouter,
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Use Middleware for Cross-Cutting Concerns">
+    Extract common logic into middleware:
+    ```typescript
+    const withLogging = t.middleware(/* ... */);
+    const withAuth = t.middleware(/* ... */);
+    const withRateLimit = t.middleware(/* ... */);
+    
+    const protectedProcedure = t.procedure
+      .unstable_pipe(withLogging)
+      .unstable_pipe(withAuth)
+      .unstable_pipe(withRateLimit);
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Errors Gracefully">
+    Always handle errors on both client and server:
+    ```typescript
+    // Server
+    throw new CRPCError({ code: "NOT_FOUND", message: "..." });
+    
+    // Client
+    try {
+      await client.procedure.query();
+    } catch (error) {
+      // Handle error
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Examples
+
+<CardGroup cols={2}>
+  <Card title="Chat Server" icon="comments">
+    Build a real-time chat server with subscriptions
+  </Card>
+  <Card title="Turtle Controller" icon="robot">
+    Control turtles remotely with type-safe commands
+  </Card>
+  <Card title="Monitoring System" icon="chart-line">
+    Monitor computer resources across your network
+  </Card>
+  <Card title="Distributed Storage" icon="database">
+    Create a distributed storage system with CRPC
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="@cc-ts/helpers" icon="toolbox" href="/packages/helpers">
+    Explore helper utilities
+  </Card>
+  <Card title="@cc-ts/builder" icon="hammer" href="/packages/builder">
+    Learn about the build system
+  </Card>
+</CardGroup>

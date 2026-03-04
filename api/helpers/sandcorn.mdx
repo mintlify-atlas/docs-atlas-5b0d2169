@@ -1,0 +1,309 @@
+---
+title: 'Sandcorn'
+description: 'Distributed unique ID generator for ComputerCraft'
+---
+
+## Overview
+
+Sandcorn (like Snowflake, but for sand computers!) is a distributed unique ID generator that creates sortable, unique identifiers perfect for distributed systems in ComputerCraft. Each ID contains a timestamp, machine ID, and sequence number.
+
+## ID Structure
+
+A Sandcorn ID is composed of:
+
+- **Timestamp** (hours since epoch) - Ensures IDs are sortable by time
+- **Machine ID** (computer ID + 1) - Ensures uniqueness across computers
+- **Sequence number** - Handles multiple IDs in the same hour
+
+The final ID is encoded as a base36 string for compactness.
+
+## Functions
+
+### createSandcornGenerator
+
+```typescript
+function createSandcornGenerator(): (tick?: number) => string
+```
+
+Creates a new Sandcorn ID generator for the current computer.
+
+**Returns:** A generator function that produces unique Sandcorn IDs
+
+**Example:**
+
+```typescript
+import { createSandcornGenerator } from '@cc-ts/helpers/sandcorn';
+
+const generateId = createSandcornGenerator();
+
+// Generate unique IDs
+const id1 = generateId();
+const id2 = generateId();
+const id3 = generateId();
+
+print(`Generated IDs:`);
+print(id1); // e.g., "a1b2c3d4"
+print(id2);
+print(id3);
+```
+
+#### Generator Function
+
+The returned generator function has the following signature:
+
+```typescript
+(tick?: number) => string
+```
+
+<ParamField path="tick" type="number">
+  Optional custom timestamp in hours since epoch. Defaults to current time.
+</ParamField>
+
+**Returns:** A base36 string representing the unique ID
+
+**Throws:** If sequence number is exhausted (extremely rare - requires >1024 IDs in same millisecond)
+
+### decodeSandcorn
+
+```typescript
+function decodeSandcorn(sandcorn: string): {
+  tick: number;
+  machineId: number;
+  seq: number;
+}
+```
+
+Decodes a Sandcorn ID into its components.
+
+<ParamField path="sandcorn" type="string" required>
+  The Sandcorn ID to decode
+</ParamField>
+
+**Returns:** Object with:
+- `tick` - Timestamp (hours since epoch)
+- `machineId` - Computer ID that generated this ID
+- `seq` - Sequence number
+
+**Example:**
+
+```typescript
+import { createSandcornGenerator, decodeSandcorn } from '@cc-ts/helpers/sandcorn';
+
+const generateId = createSandcornGenerator();
+const id = generateId();
+
+const { tick, machineId, seq } = decodeSandcorn(id);
+
+print(`This ID was generated:`);
+print(`- On computer #${machineId}`);
+print(`- At hour ${tick} since epoch`);
+print(`- Was ID #${seq} that hour`);
+```
+
+## Usage Examples
+
+### Basic ID Generation
+
+```typescript
+import { createSandcornGenerator } from '@cc-ts/helpers/sandcorn';
+
+const generateId = createSandcornGenerator();
+
+function createTask(name: string) {
+  return {
+    id: generateId(),
+    name,
+    createdAt: os.epoch(),
+    status: 'pending'
+  };
+}
+
+const task1 = createTask('Mine diamonds');
+const task2 = createTask('Build farm');
+
+print(`Task 1 ID: ${task1.id}`);
+print(`Task 2 ID: ${task2.id}`);
+```
+
+### Distributed Task System
+
+```typescript
+import { createSandcornGenerator, decodeSandcorn } from '@cc-ts/helpers/sandcorn';
+
+interface Task {
+  id: string;
+  computerId: number;
+  action: string;
+  createdAt: number;
+}
+
+const generateId = createSandcornGenerator();
+
+class TaskManager {
+  private tasks: LuaMap<string, Task> = new LuaMap();
+  
+  createTask(action: string): Task {
+    const id = generateId();
+    const task: Task = {
+      id,
+      computerId: os.getComputerID(),
+      action,
+      createdAt: os.epoch()
+    };
+    
+    this.tasks.set(id, task);
+    return task;
+  }
+  
+  getTaskOrigin(id: string) {
+    const { machineId, tick } = decodeSandcorn(id);
+    return {
+      computerId: machineId - 1, // Convert back to computer ID
+      createdHour: tick
+    };
+  }
+}
+
+const manager = new TaskManager();
+
+const task = manager.createTask('Process ore');
+print(`Created task: ${task.id}`);
+
+const origin = manager.getTaskOrigin(task.id);
+print(`Task was created on computer ${origin.computerId}`);
+```
+
+### Database-Style Records
+
+```typescript
+import { createSandcornGenerator } from '@cc-ts/helpers/sandcorn';
+
+const generateId = createSandcornGenerator();
+
+interface Player {
+  id: string;
+  name: string;
+  score: number;
+}
+
+class PlayerDatabase {
+  private players: LuaMap<string, Player> = new LuaMap();
+  
+  addPlayer(name: string): Player {
+    const player: Player = {
+      id: generateId(),
+      name,
+      score: 0
+    };
+    
+    this.players.set(player.id, player);
+    return player;
+  }
+  
+  getPlayer(id: string): Player | null {
+    return this.players.get(id) || null;
+  }
+  
+  getAllPlayers(): Player[] {
+    const result: Player[] = [];
+    for (const [, player] of this.players) {
+      result.push(player);
+    }
+    return result;
+  }
+}
+
+const db = new PlayerDatabase();
+
+const player1 = db.addPlayer('Steve');
+const player2 = db.addPlayer('Alex');
+
+print(`Player IDs:`);
+print(`${player1.name}: ${player1.id}`);
+print(`${player2.name}: ${player2.id}`);
+```
+
+### Multi-Computer Coordination
+
+```typescript
+import { createSandcornGenerator, decodeSandcorn } from '@cc-ts/helpers/sandcorn';
+import { rednet } from 'cc.rednet';
+
+const generateId = createSandcornGenerator();
+
+interface Message {
+  id: string;
+  from: number;
+  content: string;
+}
+
+function sendMessage(content: string) {
+  const msg: Message = {
+    id: generateId(),
+    from: os.getComputerID(),
+    content
+  };
+  
+  rednet.broadcast(msg, 'chat');
+  return msg.id;
+}
+
+function receiveMessage(): Message | null {
+  const [senderId, message] = rednet.receive('chat', 1);
+  
+  if (message && typeof message === 'object') {
+    const msg = message as Message;
+    
+    // Verify message origin
+    const { machineId } = decodeSandcorn(msg.id);
+    const expectedId = msg.from + 1;
+    
+    if (machineId === expectedId) {
+      return msg;
+    } else {
+      print('Warning: Message ID mismatch!');
+    }
+  }
+  
+  return null;
+}
+
+// Usage
+rednet.open('back');
+
+const msgId = sendMessage('Hello from computer #' + os.getComputerID());
+print(`Sent message with ID: ${msgId}`);
+```
+
+### Custom Timestamp
+
+```typescript
+import { createSandcornGenerator } from '@cc-ts/helpers/sandcorn';
+
+const generateId = createSandcornGenerator();
+
+// Generate ID with custom timestamp
+const customTime = Math.floor(os.epoch() / 3600);
+const id = generateId(customTime);
+
+print(`Generated ID with custom timestamp: ${id}`);
+```
+
+## Best Practices
+
+1. **Create one generator per computer** - Call `createSandcornGenerator()` once and reuse the generator
+
+2. **IDs are sortable** - IDs generated later will be lexicographically greater than earlier IDs
+
+3. **Computer IDs must be unique** - Sandcorn assumes each computer has a unique ID from `os.getComputerID()`
+
+4. **Time synchronization** - For best results across multiple computers, ensure clocks are relatively synchronized
+
+5. **Sequence exhaustion** - The generator can create up to 1024 IDs per hour on a single computer before advancing time
+
+## Notes
+
+- IDs are encoded in base36 for compact string representation
+- The generator maintains state (last timestamp and sequence number)
+- Each computer generates IDs independently without coordination
+- IDs are unique as long as computer IDs are unique

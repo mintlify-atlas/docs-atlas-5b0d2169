@@ -1,0 +1,308 @@
+---
+title: 'CLI Parser'
+description: 'Parse command-line arguments and build CLI applications'
+---
+
+## Overview
+
+The CLI parser module provides a powerful yet friendly way to parse command-line arguments and build interactive CLI applications in ComputerCraft. It supports options, positional arguments, subcommands, and automatic help text generation.
+
+## Types
+
+### ParsedArgs
+
+```typescript
+type ParsedArgs = {
+  [key: string]: string | number | boolean | string[];
+  _: string[]; // Positional arguments
+};
+```
+
+Structured object containing parsed command-line arguments.
+
+### CommandOption
+
+```typescript
+type CommandOption = {
+  name: string;
+  description: string;
+  defaultValue?: string | number | boolean;
+};
+```
+
+Defines an option that can be passed to a command.
+
+### PositionalArgument
+
+```typescript
+type PositionalArgument = {
+  name: string;
+  description: string;
+  required?: boolean;
+};
+```
+
+Defines a positional argument for a command.
+
+### Command
+
+```typescript
+type Command = {
+  name: string;
+  description: string;
+  options?: CommandOption[];
+  positionalArgs?: PositionalArgument[];
+  action?: (args: ParsedArgs) => void;
+  subcommands?: Command[];
+};
+```
+
+Represents a CLI command with options, arguments, and behavior.
+
+## Functions
+
+### parseCliArgs
+
+```typescript
+function parseCliArgs(args: string[]): ParsedArgs
+```
+
+Transforms raw command-line arguments into a structured object.
+
+<ParamField path="args" type="string[]" required>
+  Array of command-line argument strings to parse
+</ParamField>
+
+**Returns:** A `ParsedArgs` object with parsed arguments
+
+**Features:**
+
+- Options starting with `-` (e.g., `-name value`)
+- Boolean flags (options without values)
+- Automatic type conversion (numbers, booleans)
+- Positional arguments in `_` array
+
+**Example:**
+
+```typescript
+import { parseCliArgs } from '@cc-ts/helpers/cli-parser';
+
+// Basic usage
+const args = parseCliArgs(['--name', 'gandalf', '--power', '9000', 'spell']);
+print(args.name);    // "gandalf"
+print(args.power);   // 9000 (number)
+print(args._[0]);    // "spell"
+
+// Boolean flags
+const args2 = parseCliArgs(['--verbose', '--force']);
+print(args2.verbose); // true
+print(args2.force);   // true
+```
+
+### printHelp
+
+```typescript
+function printHelp(
+  commandName: string | undefined,
+  commands: Command[]
+): void
+```
+
+Displays help text for commands in a formatted style.
+
+<ParamField path="commandName" type="string | undefined">
+  Optional name of command to show help for
+</ParamField>
+
+<ParamField path="commands" type="Command[]" required>
+  Array of available commands
+</ParamField>
+
+**Example:**
+
+```typescript
+const commands: Command[] = [{
+  name: 'build',
+  description: 'Build the project',
+  options: [{
+    name: 'target',
+    description: 'Build target',
+    defaultValue: 'all'
+  }]
+}];
+
+// Show general help
+printHelp(undefined, commands);
+
+// Show help for specific command
+printHelp('build', commands);
+```
+
+### executeCommand
+
+```typescript
+function executeCommand(args: ParsedArgs, commands: Command[]): void
+```
+
+Executes a command based on parsed arguments.
+
+<ParamField path="args" type="ParsedArgs" required>
+  Parsed command-line arguments
+</ParamField>
+
+<ParamField path="commands" type="Command[]" required>
+  Available commands to execute
+</ParamField>
+
+**Features:**
+
+1. Finds the requested command
+2. Handles subcommand routing
+3. Executes the command's action or shows help
+
+**Example:**
+
+```typescript
+const gitCommands: Command[] = [{
+  name: 'commit',
+  description: 'Create a commit',
+  options: [{
+    name: 'message',
+    description: 'Commit message',
+    defaultValue: 'Update'
+  }],
+  action: (args) => {
+    print(`Committing with message: ${args.message}`);
+  }
+}];
+
+// Parse and execute
+const args = parseCliArgs(['commit', '--message', 'Fix bugs']);
+executeCommand(args, gitCommands);
+```
+
+## Complete Example
+
+```typescript
+import { parseCliArgs, executeCommand, Command } from '@cc-ts/helpers/cli-parser';
+
+// Define your CLI structure
+const commands: Command[] = [
+  {
+    name: 'mine',
+    description: 'Start mining operation',
+    options: [
+      {
+        name: 'depth',
+        description: 'How deep to mine',
+        defaultValue: 10
+      },
+      {
+        name: 'pattern',
+        description: 'Mining pattern (strip, quarry)',
+        defaultValue: 'strip'
+      }
+    ],
+    positionalArgs: [
+      {
+        name: 'direction',
+        description: 'Direction to mine (north, south, east, west)',
+        required: true
+      }
+    ],
+    action: (args) => {
+      const direction = args._[0];
+      const depth = args.depth || 10;
+      const pattern = args.pattern || 'strip';
+      
+      print(`Starting ${pattern} mine ${direction} to depth ${depth}`);
+      // Your mining logic here
+    }
+  },
+  {
+    name: 'refuel',
+    description: 'Refuel the turtle',
+    options: [
+      {
+        name: 'slot',
+        description: 'Slot to refuel from',
+        defaultValue: 1
+      }
+    ],
+    action: (args) => {
+      const slot = args.slot || 1;
+      turtle.select(slot as number);
+      turtle.refuel();
+      print(`Refueled from slot ${slot}`);
+    }
+  }
+];
+
+// Parse arguments (from script args)
+const args = parseCliArgs([...$vararg]);
+
+// Execute the command
+executeCommand(args, commands);
+```
+
+## Subcommands Example
+
+```typescript
+const commands: Command[] = [
+  {
+    name: 'git',
+    description: 'Git-like version control',
+    subcommands: [
+      {
+        name: 'commit',
+        description: 'Commit changes',
+        options: [
+          {
+            name: 'message',
+            description: 'Commit message',
+            defaultValue: 'Update'
+          }
+        ],
+        action: (args) => {
+          print(`Committing: ${args.message}`);
+        }
+      },
+      {
+        name: 'push',
+        description: 'Push commits',
+        action: (args) => {
+          print('Pushing commits...');
+        }
+      }
+    ]
+  }
+];
+
+// Usage: program git commit --message "My changes"
+const args = parseCliArgs([...$vararg]);
+executeCommand(args, commands);
+```
+
+## Usage in Scripts
+
+To use in a ComputerCraft script:
+
+```typescript
+// myprogram.ts
+import { parseCliArgs, executeCommand, Command } from '@cc-ts/helpers/cli-parser';
+
+const commands: Command[] = [
+  // your commands
+];
+
+const args = parseCliArgs([...$vararg]);
+executeCommand(args, commands);
+```
+
+Run with:
+
+```
+myprogram mine --depth 20 north
+myprogram refuel --slot 2
+myprogram help
+```

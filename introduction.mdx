@@ -1,0 +1,229 @@
+---
+title: Welcome to CC-TS
+description: TypeScript framework for ComputerCraft with type-safe RPC, bundling, and utilities
+mode: custom
+---
+
+<div className="relative overflow-hidden bg-gradient-to-br from-[#F97316] via-[#C2410C] to-[#7C2D12] dark:from-[#C2410C] dark:via-[#7C2D12] dark:to-[#431407] py-20">
+  <div className="max-w-7xl mx-auto px-6 lg:px-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Build ComputerCraft with TypeScript
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 mb-8 max-w-2xl">
+          CC-TS brings the power of TypeScript to ComputerCraft with type-safe RPC, smart bundling, and a rich set of utilities for building sophisticated in-game computers.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#C2410C] font-semibold hover:bg-white/90 transition-colors no-underline"
+          >
+            Get Started
+          </a>
+          <a 
+            href="/packages/crpc" 
+            className="inline-flex items-center px-6 py-3 rounded-lg border border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors no-underline"
+          >
+            Explore CRPC
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:block">
+        <div className="relative">
+          <div className="absolute inset-0 bg-white/10 rounded-2xl blur-3xl"></div>
+          <div className="relative bg-[#0f1117] border border-white/10 rounded-xl p-6 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <pre className="text-sm text-gray-300"><code>{`import { initCRPC } from '@cc-ts/crpc'
+
+const t = initCRPC.create()
+
+export const appRouter = t.router({
+  getUser: t.procedure
+    .input((id: string) => id)
+    .query(({ input }) => {
+      return { id: input, name: 'Alice' }
+    })
+})
+
+type AppRouter = typeof appRouter`}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Quick start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get up and running with CC-TS in minutes
+  </p>
+  
+  <Steps>
+    <Step title="Create your project">
+      Use the interactive CLI to scaffold a new CC-TS project with all the configuration you need.
+      
+      ```bash
+      bun create cc-ts my-project
+      cd my-project
+      ```
+      
+      Choose between a bundled app (complete with development server) or a library package for sharing code.
+    </Step>
+    
+    <Step title="Install dependencies">
+      CC-TS projects use standard package managers. Install your dependencies with your preferred tool.
+      
+      <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+      
+      ```bash bun
+      bun install
+      ```
+      
+      ```bash yarn
+      yarn install
+      ```
+      </CodeGroup>
+    </Step>
+    
+    <Step title="Start developing">
+      Run the development server with watch mode and hot reload. Your TypeScript code will be compiled to Lua automatically.
+      
+      ```bash
+      bun run dev
+      ```
+      
+      The builder will watch your files, recompile on changes, and serve your Lua output over HTTP for easy in-game loading.
+    </Step>
+    
+    <Step title="Build for production">
+      When you're ready to deploy, build your project with optional minification.
+      
+      ```bash
+      bun run build
+      ```
+      
+      Your compiled Lua files will be output to the `dist` directory, ready to load into ComputerCraft.
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Explore by package
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    CC-TS is a collection of focused packages that work together
+  </p>
+  
+  <CardGroup cols={2}>
+    <Card title="Builder" icon="hammer" href="/packages/builder">
+      TypeScript to Lua compilation with bundling, watch mode, and development server
+    </Card>
+    <Card title="CRPC" icon="wifi" href="/packages/crpc">
+      Type-safe RPC with tRPC compatibility and native Rednet support
+    </Card>
+    <Card title="Helpers" icon="toolbox" href="/packages/helpers">
+      Utilities for events, CLI parsing, distributed IDs, and more
+    </Card>
+    <Card title="create-cc-ts" icon="wand-magic-sparkles" href="/packages/create-cc-ts">
+      Interactive project scaffolding to get started instantly
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Key features
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Everything you need to build powerful ComputerCraft programs
+  </p>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="p-6 rounded-xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] hover:border-[#F97316] dark:hover:border-[#F97316] transition-colors">
+      <div className="text-[#F97316] mb-3">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+        Type-safe RPC
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Build end-to-end type-safe APIs with CRPC, inspired by tRPC. Full autocomplete and type checking from server to client.
+      </p>
+    </div>
+    
+    <div className="p-6 rounded-xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] hover:border-[#F97316] dark:hover:border-[#F97316] transition-colors">
+      <div className="text-[#F97316] mb-3">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      </div>
+      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+        Smart bundling
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Automatic dependency resolution, incremental compilation, and development server with watch mode.
+      </p>
+    </div>
+    
+    <div className="p-6 rounded-xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] hover:border-[#F97316] dark:hover:border-[#F97316] transition-colors">
+      <div className="text-[#F97316] mb-3">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+        </svg>
+      </div>
+      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+        Promise-based events
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Modern event handling with promises, async/await support, and graceful cancellation with AbortController.
+      </p>
+    </div>
+    
+    <div className="p-6 rounded-xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] hover:border-[#F97316] dark:hover:border-[#F97316] transition-colors">
+      <div className="text-[#F97316] mb-3">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+        </svg>
+      </div>
+      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+        Developer experience
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Full TypeScript support with source maps, rich CLI parser, and utilities designed for ComputerCraft's unique environment.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl bg-gradient-to-r from-[#F97316] to-[#C2410C] p-8 sm:p-12">
+    <div className="max-w-3xl">
+      <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-4">
+        Ready to build?
+      </h2>
+      <p className="text-lg text-white/90 mb-6">
+        Start building type-safe ComputerCraft programs with CC-TS today. Check out the quickstart guide to create your first project.
+      </p>
+      <a 
+        href="/quickstart" 
+        className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#C2410C] font-semibold hover:bg-white/90 transition-colors no-underline"
+      >
+        Get Started →
+      </a>
+    </div>
+  </div>
+</div>

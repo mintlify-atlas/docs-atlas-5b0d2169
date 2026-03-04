@@ -1,0 +1,248 @@
+---
+title: CLI
+description: Command-line interface for @cc-ts/builder
+---
+
+The `cc-ts` CLI tool provides TypeScript to Lua compilation for ComputerCraft projects with automatic bundling, watch mode, and development server features.
+
+## Installation
+
+```bash
+npm install -g @cc-ts/builder
+```
+
+## Usage
+
+```bash
+cc-ts [options] [files...]
+```
+
+### Examples
+
+```bash
+# Compile specific files
+cc-ts src/main.ts src/utils.ts
+
+# Use a tsconfig.json
+cc-ts -p tsconfig.json
+
+# Watch mode with development server
+cc-ts -p tsconfig.json --watch --serve
+
+# Minify output
+cc-ts src/main.ts --minify
+```
+
+## Commands
+
+The CLI processes files based on the command-line arguments and TypeScript configuration. It supports both direct file compilation and project-based compilation using `tsconfig.json`.
+
+### Standard Mode
+
+Compiles TypeScript files to Lua once and exits.
+
+```bash
+cc-ts [files...]
+```
+
+### Watch Mode
+
+Monitors files for changes and recompiles automatically.
+
+```bash
+cc-ts --watch
+```
+
+## Options
+
+All TypeScript compiler options are supported. Below are CC-TS specific options:
+
+<ParamField path="--minify" type="boolean">
+  Minify the resulting Lua files using luamin. Reduces file size by removing whitespace and shortening variable names.
+  
+  ```bash
+  cc-ts src/main.ts --minify
+  ```
+</ParamField>
+
+<ParamField path="--builtInModules" type="string[]">
+  Array of module names to treat as built-in (not bundled). These modules are assumed to exist in the ComputerCraft environment.
+  
+  ```bash
+  cc-ts src/main.ts --builtInModules cc.audio.dfpwm,cc.pretty
+  ```
+  
+  Default built-in modules:
+  - `cc.audio.dfpwm`
+  - `cc.completion`
+  - `cc.expect`
+  - `cc.image.nft`
+  - `cc.pretty`
+  - `cc.require`
+  - `cc.shell.completion`
+  - `cc.strings`
+</ParamField>
+
+<ParamField path="--serve" type="boolean">
+  Start an HTTP server to serve compiled files. Requires `--watch` mode.
+  
+  ```bash
+  cc-ts -p tsconfig.json --watch --serve
+  ```
+</ParamField>
+
+<ParamField path="--servePort" type="number" default="8080">
+  Port number for the HTTP server. Alias: `-sp`
+  
+  ```bash
+  cc-ts --watch --serve --servePort 3000
+  ```
+</ParamField>
+
+<ParamField path="--debug" type="boolean">
+  Enable debug logging output. Shows detailed information about the compilation process.
+  
+  ```bash
+  cc-ts src/main.ts --debug
+  ```
+</ParamField>
+
+<ParamField path="--extraPaths" type="string[]">
+  Additional Lua module search paths. These paths are prepended to `package.path` in the bundled output.
+  
+  ```bash
+  cc-ts src/main.ts --extraPaths /rom/modules,/disk/libs
+  ```
+</ParamField>
+
+<ParamField path="--ignoreAsEntryPoint" type="string[]">
+  Glob patterns for files to exclude from being treated as entry points. Files matching these patterns are still included when imported by other modules.
+  
+  ```bash
+  cc-ts src/**/*.ts --ignoreAsEntryPoint "**/*.lib.ts,src/utils/**"
+  ```
+  
+  Default: `["**/*.lib.ts"]`
+</ParamField>
+
+### TypeScript Options
+
+All standard TypeScript compiler options are supported:
+
+<ParamField path="-p, --project" type="string">
+  Path to tsconfig.json file
+  
+  ```bash
+  cc-ts -p tsconfig.json
+  ```
+</ParamField>
+
+<ParamField path="--watch" type="boolean">
+  Watch input files and recompile on changes
+  
+  ```bash
+  cc-ts --watch
+  ```
+</ParamField>
+
+<ParamField path="--incremental" type="boolean">
+  Enable incremental compilation for faster rebuilds in watch mode
+  
+  ```bash
+  cc-ts --watch --incremental
+  ```
+</ParamField>
+
+<ParamField path="--measurePerformance" type="boolean">
+  Display performance measurements after compilation
+  
+  ```bash
+  cc-ts src/main.ts --measurePerformance
+  ```
+</ParamField>
+
+<ParamField path="--help" type="boolean">
+  Display help information
+  
+  ```bash
+  cc-ts --help
+  ```
+</ParamField>
+
+<ParamField path="--version" type="boolean">
+  Display version information
+  
+  ```bash
+  cc-ts --version
+  ```
+</ParamField>
+
+## Configuration File
+
+Options can be specified in `tsconfig.json` under the `cc-ts` property:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "commonjs",
+    "outDir": "dist"
+  },
+  "cc-ts": {
+    "minify": true,
+    "builtInModules": ["mylib"],
+    "ignoreAsEntryPoint": ["**/*.lib.ts"],
+    "extraPaths": ["/rom/modules"]
+  }
+}
+```
+
+## Exit Codes
+
+The CLI uses standard TypeScript exit codes:
+
+- `0` - Success
+- `1` - Diagnostics present, outputs generated
+- `2` - Diagnostics present, outputs skipped
+
+## Development Server
+
+When using `--serve` with `--watch`, the CLI starts an HTTP server that serves the compiled Lua files:
+
+```bash
+cc-ts -p tsconfig.json --watch --serve --servePort 8080
+```
+
+Files can be fetched from ComputerCraft using:
+
+```lua
+local h = http.get("http://your-ip:8080/main.lua")
+local content = h.readAll()
+h.close()
+```
+
+## Performance
+
+### Incremental Compilation
+
+In watch mode with `--incremental`, only changed files and their dependencies are recompiled:
+
+```bash
+cc-ts --watch --incremental
+```
+
+### Performance Monitoring
+
+Use `--measurePerformance` to see detailed timing information:
+
+```bash
+cc-ts src/main.ts --measurePerformance
+```
+
+Output example:
+```
+Performance measurements:
+  createProgram: 245.32ms
+  getEmitPlan: 89.45ms
+  Total: 334.77ms
+```

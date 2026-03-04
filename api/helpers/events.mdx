@@ -1,0 +1,360 @@
+---
+title: 'Event and EventEmitter'
+description: 'Type-safe event classes and event emitter for ComputerCraft'
+---
+
+## Overview
+
+The events module provides strongly-typed event classes and an EventEmitter for building reactive ComputerCraft applications. The `Event` classes represent various ComputerCraft OS events with typed properties, while `EventEmitter` provides a pub/sub pattern for custom events.
+
+## Event Classes
+
+CC-TS provides typed event classes for all ComputerCraft OS events:
+
+### CharEvent
+
+Fired when a character is typed.
+
+<ParamField path="character" type="string">
+  The character that was typed
+</ParamField>
+
+<ParamField path="name" type="'char'" default="'char'">
+  Event name
+</ParamField>
+
+### KeyEvent
+
+Fired when a key is pressed or released.
+
+<ParamField path="key" type="Key">
+  The key code
+</ParamField>
+
+<ParamField path="isHeld" type="boolean">
+  Whether the key is being held
+</ParamField>
+
+<ParamField path="isUp" type="boolean">
+  Whether this is a key release event
+</ParamField>
+
+<ParamField path="name" type="'key' | 'key_up'">
+  Returns 'key' or 'key_up' depending on isUp
+</ParamField>
+
+### PasteEvent
+
+Fired when text is pasted.
+
+<ParamField path="text" type="string">
+  The pasted text
+</ParamField>
+
+### TimerEvent
+
+Fired when a timer completes.
+
+<ParamField path="id" type="number">
+  The timer ID
+</ParamField>
+
+<ParamField path="isAlarm" type="boolean">
+  Whether this is an alarm event
+</ParamField>
+
+### MouseEvent
+
+Fired for mouse interactions.
+
+<ParamField path="button" type="number">
+  The mouse button (0 = left, 1 = right, 2 = middle)
+</ParamField>
+
+<ParamField path="x" type="number">
+  X coordinate
+</ParamField>
+
+<ParamField path="y" type="number">
+  Y coordinate
+</ParamField>
+
+<ParamField path="side" type="string | null">
+  Side (for monitor_touch events)
+</ParamField>
+
+<ParamField path="type" type="MouseEventType">
+  Type of mouse event (Click, Up, Scroll, Drag, Touch, Move)
+</ParamField>
+
+### RednetMessageEvent
+
+Fired when a rednet message is received.
+
+<ParamField path="sender" type="number">
+  ID of the sending computer
+</ParamField>
+
+<ParamField path="message" type="Message">
+  The message content (generic type)
+</ParamField>
+
+<ParamField path="protocol" type="string | null">
+  Optional protocol string
+</ParamField>
+
+### ModemMessageEvent
+
+Fired when a modem message is received.
+
+<ParamField path="side" type="string">
+  Side the modem is on
+</ParamField>
+
+<ParamField path="channel" type="number">
+  Channel the message was received on
+</ParamField>
+
+<ParamField path="replyChannel" type="number">
+  Reply channel
+</ParamField>
+
+<ParamField path="message" type="any">
+  The message content
+</ParamField>
+
+<ParamField path="distance" type="number">
+  Distance to sender
+</ParamField>
+
+### HTTPEvent
+
+Fired when an HTTP request completes.
+
+<ParamField path="url" type="string">
+  The requested URL
+</ParamField>
+
+<ParamField path="handle" type="HTTPResponse | null">
+  Response handle (null on failure)
+</ParamField>
+
+<ParamField path="error" type="string | null">
+  Error message (null on success)
+</ParamField>
+
+### Other Events
+
+Additional event classes are provided for:
+
+- `TaskCompleteEvent` - Async task completion
+- `RedstoneEvent` - Redstone changes
+- `TerminateEvent` - Program termination
+- `DiskEvent` - Disk insertion/ejection
+- `PeripheralEvent` - Peripheral attach/detach
+- `WebSocketEvent` - WebSocket connection
+- `ResizeEvent` - Terminal/monitor resize
+- `TurtleInventoryEvent` - Turtle inventory changes
+- `GenericEvent` - Fallback for unknown events
+
+## Event Functions
+
+### pullEventRaw
+
+```typescript
+function pullEventRaw(filter?: string | null): AnyEvent | null
+```
+
+Pulls the next OS event and converts it to a typed event object. Does not throw on terminate events.
+
+<ParamField path="filter" type="string | null">
+  Optional event name to filter for
+</ParamField>
+
+**Returns:** A typed event object or null
+
+### pullEvent
+
+```typescript
+function pullEvent(filter?: string | null): AnyEvent | null
+```
+
+Like `pullEventRaw`, but throws "Terminated" when receiving a terminate event.
+
+### pullEventAs
+
+```typescript
+function pullEventAs<T extends IEvent>(
+  type: Constructor<T>,
+  filter?: string | null
+): T | null
+```
+
+Pulls an event and ensures it matches the specified type.
+
+**Example:**
+
+```typescript
+import { pullEventAs, KeyEvent } from '@cc-ts/helpers';
+
+const keyEvent = pullEventAs(KeyEvent);
+if (keyEvent) {
+  print(`Key ${keyEvent.key} pressed`);
+}
+```
+
+## EventEmitter
+
+A strongly-typed event emitter for custom application events.
+
+### Constructor
+
+```typescript
+const events = new EventEmitter<MyEvents>();
+```
+
+**Type Parameters:**
+
+- `Events` - Record mapping event names to argument arrays
+
+### on
+
+```typescript
+on<K extends keyof Events>(
+  event: K,
+  listener: (...args: Events[K]) => void
+): () => void
+```
+
+Subscribe to an event.
+
+<ParamField path="event" type="K" required>
+  Event name to listen for
+</ParamField>
+
+<ParamField path="listener" type="(...args: Events[K]) => void" required>
+  Callback function
+</ParamField>
+
+**Returns:** Cleanup function to unsubscribe
+
+**Example:**
+
+```typescript
+interface MyEvents {
+  'turtle:moved': [x: number, y: number];
+  'inventory:full': [];
+}
+
+const events = new EventEmitter<MyEvents>();
+
+const cleanup = events.on('turtle:moved', (x, y) => {
+  print(`Turtle moved to ${x}, ${y}`);
+});
+
+// Later...
+cleanup(); // Unsubscribe
+```
+
+### once
+
+```typescript
+once<K extends keyof Events>(
+  event: K,
+  listener: (...args: Events[K]) => void
+): () => void
+```
+
+Subscribe to an event that automatically unsubscribes after first trigger.
+
+**Example:**
+
+```typescript
+events.once('system:ready', () => {
+  print('System initialized!');
+});
+```
+
+### emit
+
+```typescript
+emit<K extends keyof Events>(event: K, ...args: Events[K]): void
+```
+
+Emit an event with type-safe arguments.
+
+<ParamField path="event" type="K" required>
+  Event name to emit
+</ParamField>
+
+<ParamField path="args" type="Events[K]" required>
+  Event arguments
+</ParamField>
+
+**Example:**
+
+```typescript
+events.emit('turtle:moved', 42, 73);
+```
+
+### off
+
+```typescript
+off<K extends keyof Events>(
+  event: K,
+  listener: (...args: Events[K]) => void
+): void
+```
+
+Manually unsubscribe a listener.
+
+### removeAllListeners
+
+```typescript
+removeAllListeners(event?: keyof Events): void
+```
+
+Remove all listeners for a specific event, or all events if none specified.
+
+<ParamField path="event" type="keyof Events">
+  Optional event name to clear
+</ParamField>
+
+**Example:**
+
+```typescript
+// Clear specific event
+events.removeAllListeners('user:input');
+
+// Clear everything
+events.removeAllListeners();
+```
+
+## Complete Example
+
+```typescript
+import { EventEmitter } from '@cc-ts/helpers';
+
+// Define event types
+interface RobotEvents {
+  'move': [direction: string];
+  'dig': [success: boolean, block: string];
+  'fuel:low': [remaining: number];
+}
+
+// Create emitter
+const robot = new EventEmitter<RobotEvents>();
+
+// Set up listeners
+robot.on('move', (direction) => {
+  print(`Moving ${direction}`);
+});
+
+robot.on('fuel:low', (remaining) => {
+  print(`Warning: Only ${remaining} fuel remaining!`);
+});
+
+// Emit events
+robot.emit('move', 'forward');
+robot.emit('fuel:low', 42);
+```

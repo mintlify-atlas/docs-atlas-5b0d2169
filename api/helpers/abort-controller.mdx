@@ -1,0 +1,363 @@
+---
+title: 'AbortController'
+description: 'Cancel async operations with standard AbortController API'
+---
+
+## Overview
+
+The AbortController module provides a TypeScript implementation of the standard web API for cancelling async operations in ComputerCraft. Perfect for implementing timeouts, user cancellation, and graceful operation shutdown.
+
+## Classes
+
+### AbortSignal
+
+Represents a signal object that communicates cancellation status.
+
+#### Properties
+
+<ParamField path="aborted" type="boolean" default="false">
+  Whether the signal has been aborted
+</ParamField>
+
+<ParamField path="reason" type="any">
+  The reason for aborting (error message, timeout info, etc.)
+</ParamField>
+
+<ParamField path="onabort" type="(() => void) | null">
+  Callback fired when signal is aborted
+</ParamField>
+
+#### Static Methods
+
+##### abort
+
+```typescript
+static abort(reason?: any): AbortSignal
+```
+
+Creates an already-aborted signal.
+
+<ParamField path="reason" type="any">
+  The abort reason
+</ParamField>
+
+**Returns:** A pre-aborted AbortSignal
+
+**Example:**
+
+```typescript
+import { AbortSignal } from '@cc-ts/helpers/abortController';
+
+const signal = AbortSignal.abort("Operation cancelled");
+
+// This throws immediately
+try {
+  signal.throwIfAborted();
+} catch (e) {
+  print(e); // "Operation cancelled"
+}
+```
+
+##### timeout
+
+```typescript
+static timeout(delay: number): AbortSignal
+```
+
+Creates a signal that automatically aborts after the specified delay.
+
+<ParamField path="delay" type="number" required>
+  Time in milliseconds before abort
+</ParamField>
+
+**Returns:** An AbortSignal that will abort after the delay
+
+**Example:**
+
+```typescript
+import { AbortSignal } from '@cc-ts/helpers/abortController';
+
+async function fetchWithTimeout(url: string) {
+  const signal = AbortSignal.timeout(5000);
+  
+  try {
+    const response = await http.get(url, { signal });
+    return response;
+  } catch (e) {
+    print("Request timed out!");
+  }
+}
+```
+
+##### any
+
+```typescript
+static any(signals: AbortSignal[]): AbortSignal
+```
+
+Combines multiple signals - aborts when any input signal aborts.
+
+<ParamField path="signals" type="AbortSignal[]" required>
+  Array of signals to combine
+</ParamField>
+
+**Returns:** A new combined AbortSignal
+
+**Example:**
+
+```typescript
+import { AbortSignal, AbortController } from '@cc-ts/helpers/abortController';
+
+// Abort if either 5 seconds pass OR user cancels
+const timeoutSignal = AbortSignal.timeout(5000);
+const userController = new AbortController();
+
+const combinedSignal = AbortSignal.any([
+  timeoutSignal,
+  userController.signal
+]);
+
+// Later, user can cancel
+userController.abort("User cancelled");
+```
+
+#### Instance Methods
+
+##### addEventListener
+
+```typescript
+addEventListener(
+  listener: (event: { type: "abort" }) => void,
+  options?: { once?: boolean }
+): void
+```
+
+Adds an event listener for the abort event.
+
+<ParamField path="listener" type="(event: { type: 'abort' }) => void" required>
+  Function to call when signal is aborted
+</ParamField>
+
+<ParamField path="options" type="{ once?: boolean }">
+  Listener options. Set `once: true` for one-time listeners
+</ParamField>
+
+**Example:**
+
+```typescript
+signal.addEventListener(() => {
+  print("Operation was cancelled!");
+}, { once: true });
+```
+
+##### throwIfAborted
+
+```typescript
+throwIfAborted(): void
+```
+
+Throws the abort reason if the signal has been aborted.
+
+**Throws:** The abort reason
+
+**Example:**
+
+```typescript
+async function longRunningTask(signal: AbortSignal) {
+  for (let i = 0; i < 100; i++) {
+    signal.throwIfAborted(); // Check for cancellation
+    
+    // Do work
+    await doSomeWork();
+  }
+}
+```
+
+### AbortController
+
+Controller object that lets you abort operations on demand.
+
+#### Properties
+
+<ParamField path="signal" type="AbortSignal">
+  The AbortSignal associated with this controller
+</ParamField>
+
+#### Methods
+
+##### abort
+
+```typescript
+abort(reason?: any): void
+```
+
+Aborts the associated signal.
+
+<ParamField path="reason" type="any">
+  Optional reason for aborting
+</ParamField>
+
+**Example:**
+
+```typescript
+const controller = new AbortController();
+
+setTimeout(() => {
+  controller.abort("Timeout reached");
+}, 5000);
+```
+
+## Usage Examples
+
+### Basic Cancellation
+
+```typescript
+import { AbortController } from '@cc-ts/helpers/abortController';
+
+const controller = new AbortController();
+
+async function cancellableOperation() {
+  try {
+    for (let i = 0; i < 100; i++) {
+      controller.signal.throwIfAborted();
+      
+      print(`Step ${i}`);
+      await sleep(100);
+    }
+  } catch (e) {
+    print(`Cancelled: ${e}`);
+  }
+}
+
+// Start the operation
+cancellableOperation();
+
+// Cancel after 2 seconds
+setTimeout(() => {
+  controller.abort("User requested cancellation");
+}, 2000);
+```
+
+### Timeout Implementation
+
+```typescript
+import { AbortSignal } from '@cc-ts/helpers/abortController';
+
+async function fetchWithTimeout(url: string, timeoutMs: number) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  
+  try {
+    const response = await http.get(url);
+    signal.throwIfAborted();
+    return response;
+  } catch (e) {
+    if (signal.aborted) {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw e;
+  }
+}
+
+// Use it
+try {
+  const data = await fetchWithTimeout('https://example.com', 5000);
+  print('Got data:', data);
+} catch (e) {
+  print('Error:', e);
+}
+```
+
+### Turtle Operations with Cancellation
+
+```typescript
+import { AbortController } from '@cc-ts/helpers/abortController';
+
+const miningController = new AbortController();
+
+async function mineLayer(depth: number, signal: AbortSignal) {
+  for (let i = 0; i < depth; i++) {
+    signal.throwIfAborted();
+    
+    turtle.dig();
+    turtle.forward();
+    await sleep(500);
+  }
+}
+
+// Start mining
+try {
+  await mineLayer(100, miningController.signal);
+  print('Mining complete!');
+} catch (e) {
+  print('Mining cancelled:', e);
+}
+
+// Cancel from anywhere
+function handleKeyPress() {
+  if (key === keys.q) {
+    miningController.abort('User pressed Q');
+  }
+}
+```
+
+### Combined Signals
+
+```typescript
+import { AbortSignal, AbortController } from '@cc-ts/helpers/abortController';
+
+// Multiple cancellation conditions
+const userController = new AbortController();
+const timeoutSignal = AbortSignal.timeout(30000); // 30 seconds
+
+const signal = AbortSignal.any([
+  userController.signal,
+  timeoutSignal
+]);
+
+async function smartOperation(signal: AbortSignal) {
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      // Do work...
+      await sleep(1000);
+    }
+  } catch (e) {
+    print(`Stopped because: ${e}`);
+  }
+}
+
+smartOperation(signal);
+
+// User can cancel anytime
+userController.abort('User stopped');
+```
+
+### With Event Listeners
+
+```typescript
+import { AbortController } from '@cc-ts/helpers/abortController';
+
+const controller = new AbortController();
+
+// Set up cleanup
+controller.signal.addEventListener(() => {
+  print('Cleaning up resources...');
+  // Close files, connections, etc.
+}, { once: true });
+
+// Or use onabort
+controller.signal.onabort = () => {
+  print('Operation aborted!');
+};
+
+// Later...
+controller.abort();
+```
+
+## Notes
+
+- This implementation closely follows the web standard AbortController API
+- Signals can be passed to async functions to enable cancellation
+- Always check `signal.throwIfAborted()` at appropriate points in long operations
+- Use `AbortSignal.timeout()` for simple timeout scenarios
+- Combine signals with `AbortSignal.any()` for complex cancellation logic

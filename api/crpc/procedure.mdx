@@ -1,0 +1,336 @@
+---
+title: Procedure Builder
+description: Build type-safe RPC procedures
+---
+
+## Procedure Builder
+
+The procedure builder is used to create queries, mutations, and subscriptions with input validation, output validation, and middleware.
+
+```typescript
+const greeting = t.procedure
+  .input(z.string())
+  .query(({ input }) => {
+    return `Hello ${input}!`;
+  });
+```
+
+## Methods
+
+### input()
+
+Define input validation for the procedure using a parser (e.g., Zod).
+
+```typescript
+const userById = t.procedure
+  .input(z.object({
+    id: z.number(),
+  }))
+  .query(({ input }) => {
+    return getUser(input.id);
+  });
+```
+
+<ParamField path="schema" type="Parser">
+  A parser/validator for the input. Can be a Zod schema or any object with a `parse` method.
+</ParamField>
+
+<ResponseField name="return" type="ProcedureBuilder">
+  A new procedure builder with the input type applied.
+</ResponseField>
+
+#### Multiple Input Parsers
+
+You can chain multiple `.input()` calls. The inputs will be merged:
+
+```typescript
+const proc = t.procedure
+  .input(z.object({ id: z.number() }))
+  .input(z.object({ name: z.string() }))
+  .query(({ input }) => {
+    // input is { id: number; name: string }
+    return { id: input.id, name: input.name };
+  });
+```
+
+### $input()
+
+Type the input without validation. Useful when you want type safety but don't need runtime validation.
+
+```typescript
+const proc = t.procedure
+  .$input<{ id: number }>()
+  .query(({ input }) => {
+    // input is typed as { id: number } but not validated
+    return getUser(input.id);
+  });
+```
+
+<ResponseField name="return" type="ProcedureBuilder">
+  A new procedure builder with the input type applied (no validation).
+</ResponseField>
+
+### output()
+
+Define output validation for the procedure. Validates the return value before sending to the client.
+
+```typescript
+const userById = t.procedure
+  .input(z.number())
+  .output(z.object({
+    id: z.number(),
+    name: z.string(),
+  }))
+  .query(({ input }) => {
+    return getUser(input); // Must match output schema
+  });
+```
+
+<ParamField path="schema" type="Parser">
+  A parser/validator for the output.
+</ParamField>
+
+<ResponseField name="return" type="ProcedureBuilder">
+  A new procedure builder with output validation applied.
+</ResponseField>
+
+### meta()
+
+Attach metadata to the procedure. Useful for permissions, descriptions, etc.
+
+```typescript
+const adminOnly = t.procedure
+  .meta({ role: 'admin' })
+  .query(() => {
+    return 'Admin data';
+  });
+```
+
+<ParamField path="meta" type="TMeta">
+  Metadata object matching the type defined in `initCRPC.meta()`.
+</ParamField>
+
+<ResponseField name="return" type="ProcedureBuilder">
+  A new procedure builder with metadata attached.
+</ResponseField>
+
+### use()
+
+Apply middleware to the procedure. Middleware runs before the resolver.
+
+```typescript
+const protectedProcedure = t.procedure
+  .use(authMiddleware)
+  .query(({ ctx }) => {
+    // ctx.user is available from middleware
+    return ctx.user;
+  });
+```
+
+<ParamField path="fn" type="MiddlewareFunction | MiddlewareBuilder">
+  A middleware function or builder to apply.
+</ParamField>
+
+<ResponseField name="return" type="ProcedureBuilder">
+  A new procedure builder with the middleware applied.
+</ResponseField>
+
+### unstable_concat()
+
+Combine two procedure builders. Useful for creating reusable procedure bases.
+
+```typescript
+const baseProcedure = t.procedure
+  .input(z.object({ id: z.number() }));
+
+const extended = baseProcedure
+  .unstable_concat(
+    t.procedure.use(authMiddleware)
+  );
+```
+
+<ParamField path="builder" type="ProcedureBuilder">
+  Another procedure builder to merge with the current one.
+</ParamField>
+
+<ResponseField name="return" type="ProcedureBuilder">
+  A new procedure builder with both builders merged.
+</ResponseField>
+
+## Procedure Types
+
+### query()
+
+Create a query procedure. Queries are for fetching data (read operations).
+
+```typescript
+const getUsers = t.procedure
+  .query(() => {
+    return users;
+  });
+```
+
+<ParamField path="resolver" type="ProcedureResolver">
+  A function that returns the query result.
+</ParamField>
+
+<ResponseField name="return" type="QueryProcedure">
+  A query procedure that can be called from the client.
+</ResponseField>
+
+#### Resolver Options
+
+The resolver receives an options object:
+
+```typescript
+t.procedure.query(({ ctx, input }) => {
+  // ctx: The context object
+  // input: The validated input (undefined if no input)
+  return data;
+});
+```
+
+### mutation()
+
+Create a mutation procedure. Mutations are for modifying data (write operations).
+
+```typescript
+const createUser = t.procedure
+  .input(z.object({ name: z.string() }))
+  .mutation(({ input }) => {
+    return createUser(input.name);
+  });
+```
+
+<ParamField path="resolver" type="ProcedureResolver">
+  A function that performs the mutation and returns the result.
+</ParamField>
+
+<ResponseField name="return" type="MutationProcedure">
+  A mutation procedure that can be called from the client.
+</ResponseField>
+
+### subscription()
+
+Create a subscription procedure. Subscriptions stream data to clients.
+
+```typescript
+const onUserChange = t.procedure
+  .subscription(() => {
+    return new Observable((emit) => {
+      const handler = (user) => emit.next(user);
+      events.on('userChange', handler);
+      
+      return () => {
+        events.off('userChange', handler);
+      };
+    });
+  });
+```
+
+<ParamField path="resolver" type="ProcedureResolver">
+  A function that returns an AsyncIterable or Observable.
+</ParamField>
+
+<ResponseField name="return" type="SubscriptionProcedure">
+  A subscription procedure that clients can subscribe to.
+</ResponseField>
+
+#### Subscription Output Types
+
+Subscriptions must return:
+- `AsyncIterable<T>` - An async iterable
+- `Observable<T>` - An observable from `@cc-ts/crpc`
+
+## Examples
+
+### Basic Query
+
+```typescript
+const hello = t.procedure
+  .query(() => {
+    return 'Hello world!';
+  });
+```
+
+### Query with Input
+
+```typescript
+const userById = t.procedure
+  .input(z.number())
+  .query(({ input }) => {
+    return users.find(u => u.id === input);
+  });
+```
+
+### Mutation with Validation
+
+```typescript
+const createPost = t.procedure
+  .input(z.object({
+    title: z.string().min(3),
+    content: z.string(),
+  }))
+  .mutation(({ input, ctx }) => {
+    return db.post.create({
+      ...input,
+      authorId: ctx.user.id,
+    });
+  });
+```
+
+### Protected Procedure
+
+```typescript
+const protectedProcedure = t.procedure
+  .use(async ({ ctx, next }) => {
+    if (!ctx.user) {
+      throw new CRPCError({ code: 'UNAUTHORIZED' });
+    }
+    return next({
+      ctx: {
+        user: ctx.user,
+      },
+    });
+  });
+
+const myPosts = protectedProcedure
+  .query(({ ctx }) => {
+    return db.post.findMany({
+      where: { authorId: ctx.user.id },
+    });
+  });
+```
+
+### Subscription
+
+```typescript
+import { Observable } from '@cc-ts/crpc';
+
+const onMessage = t.procedure
+  .input(z.object({ roomId: z.string() }))
+  .subscription(({ input }) => {
+    return new Observable<Message>((emit) => {
+      const handler = (msg: Message) => {
+        if (msg.roomId === input.roomId) {
+          emit.next(msg);
+        }
+      };
+      
+      events.on('message', handler);
+      
+      return () => {
+        events.off('message', handler);
+      };
+    });
+  });
+```
+
+## Best Practices
+
+- Always validate inputs with `.input()` for security
+- Use queries for reads, mutations for writes
+- Add metadata for documentation and authorization
+- Create reusable procedure bases with middleware
+- Keep resolvers focused - move complex logic to separate functions
+- Use output validation in development to catch bugs early

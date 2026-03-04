@@ -1,0 +1,469 @@
+---
+title: "create-cc-ts"
+description: "Scaffold new CC-TS projects with interactive templates"
+icon: "wand-magic-sparkles"
+---
+
+## Overview
+
+`create-cc-ts` is a project scaffolding tool that helps you quickly start new ComputerCraft TypeScript projects. It provides interactive prompts and templates to set up your development environment with all the necessary dependencies and configuration.
+
+## Quick Start
+
+Create a new project with a single command:
+
+<CodeGroup>
+```bash npm
+npm create cc-ts@latest
+```
+
+```bash yarn
+yarn create cc-ts
+```
+
+```bash pnpm
+pnpm create cc-ts
+```
+
+```bash bun
+bun create cc-ts
+```
+</CodeGroup>
+
+## Usage
+
+### Interactive Mode
+
+Run without arguments for an interactive setup:
+
+```bash
+npm create cc-ts@latest
+```
+
+You'll be prompted to:
+
+1. **Choose a project directory**
+   ```
+   Where should we create your project?
+   > my-cc-project (or press Enter for current directory)
+   ```
+
+2. **Select a project template**
+   - **Bundled App** - Standard ComputerCraft application
+   - **CC Library** - Reusable library package
+
+3. **Install dependencies**
+   The tool automatically installs all required dependencies
+
+### Non-Interactive Mode
+
+Specify the directory as an argument:
+
+```bash
+npm create cc-ts@latest my-project
+```
+
+### Command-Line Options
+
+```bash
+# Show help
+npm create cc-ts@latest --help
+
+# Show version
+npm create cc-ts@latest --version
+```
+
+## Project Templates
+
+### Bundled App
+
+<Card title="Bundled App" icon="box">
+  A complete ComputerCraft application with build configuration, bundling, and a development server.
+</Card>
+
+**Includes:**
+- TypeScript configuration for ComputerCraft
+- Build scripts with watch mode
+- Development server setup
+- Example application code
+- Ready-to-use project structure
+
+**Dependencies:**
+```json
+{
+  "devDependencies": {
+    "@jackmacwindows/craftos-types": "latest",
+    "@jackmacwindows/cc-types": "latest",
+    "@jackmacwindows/lua-types": "latest",
+    "@cc-ts/typescript-to-lua": "latest",
+    "@cc-ts/builder": "latest",
+    "typescript": "^5.7.2"
+  }
+}
+```
+
+**Scripts:**
+```json
+{
+  "scripts": {
+    "build": "cc-ts",
+    "watch": "cc-ts --watch",
+    "dev": "cc-ts --watch --serve"
+  }
+}
+```
+
+**Project Structure:**
+```
+my-project/
+├── src/
+│   └── index.ts          # Entry point
+├── dist/                 # Compiled output
+├── tsconfig.json         # TypeScript config
+├── package.json
+└── README.md
+```
+
+### CC Library
+
+<Card title="CC Library" icon="book">
+  A library template for building reusable ComputerCraft packages.
+</Card>
+
+**Includes:**
+- Library-specific TypeScript configuration
+- Export setup for library distribution
+- Example library code
+- Documentation template
+
+**Project Structure:**
+```
+my-library/
+├── src/
+│   └── index.ts          # Library exports
+├── dist/                 # Compiled library
+├── tsconfig.json
+├── package.json
+└── README.md
+```
+
+## After Creation
+
+### 1. Navigate to Your Project
+
+```bash
+cd my-project
+```
+
+### 2. Start Development
+
+<Tabs>
+  <Tab title="Bundled App">
+    ```bash
+    # Build once
+    npm run build
+    
+    # Watch mode
+    npm run watch
+    
+    # Dev server
+    npm run dev
+    ```
+  </Tab>
+  
+  <Tab title="CC Library">
+    ```bash
+    # Build library
+    npm run build
+    
+    # Watch mode
+    npm run dev
+    ```
+  </Tab>
+</Tabs>
+
+### 3. Write Your Code
+
+Edit `src/index.ts` to start building your application:
+
+```typescript src/index.ts
+// Bundled App Example
+print("Hello from CC-TS!");
+
+const version = "1.0.0";
+print(`Version: ${version}`);
+
+// Your code here...
+```
+
+### 4. Test In-Game
+
+<Steps>
+  <Step title="Start the dev server">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+  
+  <Step title="Download in ComputerCraft">
+    ```lua
+    -- In-game terminal
+    wget http://localhost:8080/index.lua startup.lua
+    ```
+  </Step>
+  
+  <Step title="Run your program">
+    ```lua
+    startup.lua
+    ```
+  </Step>
+</Steps>
+
+## Customization
+
+### TypeScript Configuration
+
+The generated `tsconfig.json` is pre-configured for ComputerCraft:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "moduleResolution": "node",
+    "strict": true,
+    "types": [
+      "@jackmacwindows/cc-types",
+      "@jackmacwindows/craftos-types",
+      "@jackmacwindows/lua-types"
+    ]
+  },
+  "tstl": {
+    "luaTarget": "cobalt52",
+    "luaLibImport": "require",
+    "sourceMapTraceback": true
+  },
+  "cc-ts": {
+    "minify": false,
+    "serve": false,
+    "servePort": 8080
+  }
+}
+```
+
+Customize as needed for your project.
+
+### Adding Dependencies
+
+<Tabs>
+  <Tab title="CC-TS Packages">
+    ```bash
+    # Add CRPC for networking
+    npm install @cc-ts/crpc
+    
+    # Add helpers
+    npm install @cc-ts/helpers
+    ```
+  </Tab>
+  
+  <Tab title="Other Packages">
+    ```bash
+    # Install any npm package
+    npm install your-package
+    ```
+  </Tab>
+</Tabs>
+
+### Updating Scripts
+
+Add custom build scripts to `package.json`:
+
+```json package.json
+{
+  "scripts": {
+    "build": "cc-ts",
+    "watch": "cc-ts --watch",
+    "dev": "cc-ts --watch --serve",
+    "build:prod": "cc-ts --minify",
+    "clean": "rm -rf dist"
+  }
+}
+```
+
+## Advanced Usage
+
+### Multiple Entry Points
+
+Create multiple programs in your project:
+
+```
+src/
+├── main.ts           # Main program
+├── installer.ts      # Installer script
+└── updater.ts        # Update script
+```
+
+Each file becomes a separate Lua bundle in `dist/`.
+
+### Shared Code
+
+Create library files that won't be bundled as entry points:
+
+```typescript src/utils.lib.ts
+// .lib.ts files are excluded from entry points
+export function helper() {
+  return "I'm a helper!";
+}
+```
+
+```typescript src/main.ts
+import { helper } from "./utils.lib";
+
+print(helper());
+```
+
+Configure in `tsconfig.json`:
+
+```json
+{
+  "cc-ts": {
+    "ignoreAsEntryPoint": ["**/*.lib.ts", "src/utils/**"]
+  }
+}
+```
+
+### Workspace Setup
+
+Create a monorepo with multiple packages:
+
+```json package.json
+{
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}
+```
+
+```
+project/
+├── packages/
+│   ├── shared/       # Shared library
+│   └── ui/           # UI components
+└── apps/
+    ├── main/         # Main application
+    └── admin/        # Admin tool
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Directory not empty error">
+    When creating in an existing directory, you'll be prompted to continue. Either:
+    - Choose a different directory
+    - Confirm to continue anyway
+    - Clear the directory first
+  </Accordion>
+
+  <Accordion title="Installation fails">
+    Make sure you have Node.js 12.13.0 or higher:
+    ```bash
+    node --version
+    ```
+    
+    Try clearing npm cache:
+    ```bash
+    npm cache clean --force
+    ```
+  </Accordion>
+
+  <Accordion title="TypeScript errors after creation">
+    Ensure all type definitions are installed:
+    ```bash
+    npm install
+    ```
+    
+    Restart your editor's TypeScript server.
+  </Accordion>
+</AccordionGroup>
+
+## Examples
+
+### Basic Turtle Program
+
+```bash
+# Create project
+npm create cc-ts@latest turtle-miner
+cd turtle-miner
+
+# Edit src/index.ts
+# Add turtle mining logic
+
+# Build and deploy
+npm run dev
+# Then in-game: wget http://localhost:8080/index.lua miner.lua
+```
+
+### Networking Application
+
+```bash
+# Create project
+npm create cc-ts@latest chat-app
+cd chat-app
+
+# Install CRPC
+npm install @cc-ts/crpc @cc-ts/helpers
+
+# Build your chat app
+npm run dev
+```
+
+### Library Package
+
+```bash
+# Create library
+npm create cc-ts@latest my-library
+# Select "CC Library" template
+
+cd my-library
+
+# Build library
+npm run build
+
+# Publish to npm
+npm publish
+```
+
+## What's Included
+
+<CardGroup cols={2}>
+  <Card title="TypeScript Setup" icon="code">
+    Full TypeScript configuration with ComputerCraft types
+  </Card>
+  <Card title="Build System" icon="hammer">
+    Ready-to-use build scripts with watch mode
+  </Card>
+  <Card title="Dev Server" icon="server">
+    HTTP server for rapid in-game testing
+  </Card>
+  <Card title="Type Definitions" icon="file-code">
+    Complete type definitions for CC APIs
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Learn the basics of CC-TS development
+  </Card>
+  <Card title="@cc-ts/builder" icon="hammer" href="/packages/builder">
+    Understand the build system
+  </Card>
+  <Card title="@cc-ts/crpc" icon="network-wired" href="/packages/crpc">
+    Add networking to your project
+  </Card>
+  <Card title="@cc-ts/helpers" icon="toolbox" href="/packages/helpers">
+    Use helper utilities
+  </Card>
+</CardGroup>

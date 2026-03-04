@@ -1,0 +1,98 @@
+{
+  "projectType": "framework",
+  "projectName": "CC-TS",
+  "projectDescription": "TypeScript framework for ComputerCraft with type-safe RPC, bundling, and utilities",
+  "theme": "aspen",
+  "primaryColor": "#F97316",
+  "lightColor": "#FED7AA",
+  "darkColor": "#C2410C",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/typescript-to-lua"
+            ]
+          },
+          {
+            "group": "Packages",
+            "pages": [
+              "packages/builder",
+              "packages/crpc",
+              "packages/helpers",
+              "packages/create-cc-ts"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Builder",
+            "pages": [
+              "api/builder/cli",
+              "api/builder/transpiler",
+              "api/builder/bundler"
+            ]
+          },
+          {
+            "group": "CRPC",
+            "pages": [
+              "api/crpc/init",
+              "api/crpc/router",
+              "api/crpc/procedure",
+              "api/crpc/middleware",
+              "api/crpc/client",
+              "api/crpc/transports"
+            ]
+          },
+          {
+            "group": "Helpers",
+            "pages": [
+              "api/helpers/events",
+              "api/helpers/cli-parser",
+              "api/helpers/abort-controller",
+              "api/helpers/sandcorn",
+              "api/helpers/scheduler"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Type-safe RPC with tRPC compatibility",
+    "TypeScript to Lua compilation and bundling",
+    "Promise-based event handling",
+    "Development server with watch mode",
+    "CLI parser and utilities",
+    "Distributed ID generation"
+  ],
+  "publicApiSurface": [
+    "initCRPC",
+    "createRouter",
+    "createProcedure",
+    "createMiddleware",
+    "createClient",
+    "CCTranspiler",
+    "Event",
+    "EventEmitter",
+    "AbortController",
+    "sandcorn",
+    "Scheduler",
+    "cliParser"
+  ]
+}
